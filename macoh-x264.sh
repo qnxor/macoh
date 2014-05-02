@@ -86,10 +86,10 @@ moh_get_video () {
 	local ans=y
 	[[ -r $home/$mov && $1 != force ]] && read -p "The video file seems exist in $home. Redownload? [n] " ans
 	if [[ $ans = y || $ans = Y ]]; then
-		rm -f $bin/done-video
+		rm -f $home/done-video
 		echo "Fetching The Big Buck Bunny movie (692 MB) into $home. This may take a while ..."
 		wget $home/$mov "http://blender-mirror.kino3d.org/peach/bigbuckbunny_movies/$mov" -#
-		> $bin/done-video
+		> $home/done-video
 	fi
 }
 
@@ -99,7 +99,7 @@ moh_check_sane () {
 	[[ -r $bin/done-handbrake && -x $bin/HandBrakeCLI ]] || moh_get_handbrake force
 	[[ -r $bin/done-ipg && -d /Applications/Intel\ Power\ Gadget ]] || moh_get_ipg force
 	[[ -r $bin/done-gle && -d ~/Applications/QGLE.app ]] || moh_get_gle force
-	[[ -r $bin/done-video && -r $home/$mov ]] || moh_get_video force
+	[[ -r $home/done-video && -r $home/$mov ]] || moh_get_video force
 }
 
 moh_launch () {
