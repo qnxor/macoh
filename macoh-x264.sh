@@ -17,6 +17,7 @@ mkv=$home/big_buck_bunny_1080p_h264_transcoded.mkv
 ipglog=$logs/$testid-ipg.csv
 hblog=$logs/$testid-hb.log
 graph=$home/$testid-graph.png
+graphgif=$home/$testid-graph.gif
 
 mkdir -p $home $logs $tmp $bin
 
@@ -118,7 +119,7 @@ sleep 15" > $tmp/cmd-x264.sh
 
 	# run the x264 encoding
 	echo "Now executing the x264 transcode. This will take a while. Expect fans to go berserk in 30-60 sec ..."
-	/Applications/Intel\ Power\ Gadget/PowerLog -resolution 300 -file $ipglog -cmd bash $tmp/cmd-x264.sh
+	#/Applications/Intel\ Power\ Gadget/PowerLog -resolution 300 -file $ipglog -cmd bash $tmp/cmd-x264.sh
 	echo "Done."
 
 	# Prepare to plot graph from the csv output of IPG
@@ -178,6 +179,9 @@ GLE
 		$tmp/ipg.csv \
 		"$cpu   -   ${mins}m ${secs}s (${totsecs}s)   -   $avgfps avg fps" \
 		"Temp (max reached: $maxtemp C)" "Freq" >/dev/null
+	
+	# convert to gif if sips exists (smaller)
+	which sips >/dev/null && sips -s format gif $graph --out $graphgif && rm $graph && graph=$graphgif
 
 	echo "
 Max temp reached: $maxtemp C
