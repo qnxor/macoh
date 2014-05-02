@@ -118,7 +118,7 @@ echo Cooling off for 15 seconds ...
 sleep 15" > $tmp/cmd-x264.sh
 
 	# run the x264 encoding
-	echo "Now executing the x264 transcode. This will take a while. Expect fans to go berserk in 30-60 sec ..."
+	echo "Now executing the x264 transcode. This will take a while. Expect the fans to go berserk soon ..."
 	/Applications/Intel\ Power\ Gadget/PowerLog -resolution 300 -file $ipglog -cmd bash $tmp/cmd-x264.sh
 	echo "Done."
 
