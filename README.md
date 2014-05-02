@@ -1,7 +1,7 @@
 MacOH
 =====
 
-Small tool for Mac OS X that automatically downloads and installs the needed tools and a video, then transcodes (x264) the video using all cores, monitoring CPU temperature and frequency which are then plotted versus time. Overheating and/or throttling, if any, are easily spotted. See a [sample graph output](http://www.damtp.cam.ac.uk/research/afha/people/bogdan/macoh/graph.png) (no thorttling).
+Small tool for Mac OS X that automatically downloads and installs the needed tools and a video, then transcodes (x264) the video using all cores, monitoring CPU temperature and frequency which are then plotted versus time. Overheating and/or throttling, if any, are easily spotted. See a [sample graph output](http://www.damtp.cam.ac.uk/research/afha/people/bogdan/macoh/graph.png) (no throttling).
 
 For now, this automatically does the following:
 
