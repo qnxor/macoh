@@ -1,9 +1,9 @@
 MacOH
 =====
 
-Small tool for Mac OS X that automatically downloads and installs the needed tools and a video, then transcodes (x264) the video using all cores, monitoring CPU temperature and frequency which are then plotted versus time. Overheating and/or throttling, if any, are easily spotted.
+Small tool for Mac OS X that automatically downloads and installs the needed tools and a video, then transcodes (x264) the video using all cores, monitoring CPU temperature and frequency which are then plotted versus time. Overheating and/or throttling, if any, are easily spotted. See a [sample graph output](http://www.damtp.cam.ac.uk/research/afha/people/bogdan/macoh/graph.png) (no thorttling).
 
-I use it, but help with testing will be appreciated. For now, this automatically does the following:
+For now, this automatically does the following:
 
 - Grabs a number of free and open source tools
   - [Intel Power Gadget](https://software.intel.com/en-us/articles/intel-power-gadget-20) for measuring and logging temp, freq and power
