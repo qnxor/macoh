@@ -24,12 +24,13 @@ For now, this automatically does the following:
 
 - Donwload and extract `macoh-x264.sh` in your home folder
 - Then in Terminal do `bash ~/macoh-x264.sh`
+- Choose option 0 from the old school menu
 
 That's about it, it will report what it does/needs. You can make it executable with `chmod u+x macoh-x264.sh` if you wish and then do `./macoh-x264.sh`.
 
-It accepts an argument, `./macoh-x264.sh NAME`, where `NAME` is an identifier appended to output files. Default `NAME` is the current date as `yyyymmdd-HHMMSS`.
+It accepts an argument, `./macoh-x264.sh NAME`, where `NAME` is an identifier prepended to output files. Default `NAME` is the current date as `yyyymmdd-HHMMSS`.
 
-It writes only to your home folder, in `$HOME/Applications` (QGLE) and `$HOME/macoh` (everything else). The only exception is the Intel Power Gadget which is installed in /Applications. All tools can be uninstalled easily (see Todo below).
+It downloads and writes only to your home folder, in `$HOME/Applications` (QGLE) and `$HOME/macoh` (everything else). The only exception is the Intel Power Gadget which is installed in /Applications. See Todo below for manual uninstall.
 
 ## Feedback
 
@@ -42,14 +43,15 @@ Otherwise you can reach me via my homepage: http://www.damtp.cam.ac.uk/research/
 ## Todo
 
 - Add uninstall option. For now, do it manually:
-  - /Applications > Intel Power Gadget > Uninstall
+  - /Applications > Intel Power Gadget > Uninstaller
   - ~/Applications > QGLE ... move to trash,
   - `rm -rf ~/macoh/*/` (this preserves the movie and plots)
-- Add 3D benchmark for GPU stress testing
-- Cross-platform or multi-platform versions?
-- Linear regression between start+wait+5sec and end-cool-5sec to auto detect throttle
+- Regression between start+wait+5sec and end-cool-5sec to auto detect throttle
 - Avg and stddev for freq between above bounds
 - Same for temp between start+wait+60sec and end-cool-5sec
+- Add fan speed monitoring and logging (+graph)
+- Add 3D benchmark for GPU stress testing
+- Cross-platform or multi-platform versions?
 - Maybe also auto-upload the results and .png somewhere?
 
 ## Changelog
