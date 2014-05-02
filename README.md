@@ -16,8 +16,6 @@ I use it, but help with testing will be appreciated. For now, this automatically
 - plots a graph of temperature and frequency vs. time
 - reports max reached temp, max reached freq, duration and average encoding performance (FPS)
 
-**Tested:** Tested on a fresh Mavericks 10.9.2, Hasswell Core i7-4850HQ, but should work on most recent Mac OSX versions and CPUs. Let me know if it worked for you on a different CPU and/or Mac OS so I can update the compatibility list. Please [report](https://github.com/qnxor/macoh/issues) if it doesn't work.
-
 **Stress:** This tool is not meant to stress the CPU to unrealistic levels (like, for intstance, Prime95) but it is still above what even demanding tasks will achieve. It does not yet stress test the GPU; that's planned for later.
 
 **Disclaimer:** As per the usual nitty gritty, I cannot be held responsible if your spouse leaves you as a result of running this tool, or worse: if your Mac gets damaged. Most likely you'll be just fine though.
@@ -32,6 +30,12 @@ That's about it. It will tell you what it does/needs. You can optionally do `~/m
 
 It writes only to your home folder, in `$HOME/Applications` (QGLE) and `$HOME/macoh` (everything else). The only exception is the Intel Power Gadget which is installed in /Applications. All tools can be uninstalled and erased easily (see Todo).
 
+## Feedback
+
+Tested on a fresh Mavericks 10.9.2, Hasswell Core i7-4850HQ, but should work on most recent Mac OSX versions and CPUs. Let me know if it worked for you on a different CPU and/or Mac OS so I can update the compatibility list. If it didn't work for you then please [report](https://github.com/qnxor/macoh/issues) it on GitHub.
+
+[Bogdan Roman](http://www.damtp.cam.ac.uk/research/afha/bogdan), University of Cambridge, 2014
+
 ## Todo
 
 - Add uninstall option. For now, do it manually:
@@ -44,12 +48,6 @@ It writes only to your home folder, in `$HOME/Applications` (QGLE) and `$HOME/ma
 - Avg and stddev for freq between above bounds
 - Same for temp between start+wait+60sec and end-cool-5sec
 - Maybe also auto-upload the results and .png somewhere?
-
-## Feedback
-
-Let me know if it worked for you on a different CPU and/or Mac OS so I can update the compatibility list. If it didn't work for you then please [report it on GitHub](https://github.com/qnxor/macoh/issues).
-
-[Bogdan Roman](http://www.damtp.cam.ac.uk/research/afha/bogdan), University of Cambridge, 2014
 
 ## Changelog
 
