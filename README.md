@@ -44,3 +44,6 @@ It writes only to your home folder, in `$HOME/Applications` (QGLE) and `$HOME/ma
 - Avg and stddev for freq between above bounds
 - Same for temp between start+wait+60sec and end-cool-5sec
 - Maybe also auto-upload the results and .png somewhere?
+
+By [Bogdan Roman](http://www.damtp.cam.ac.uk/research/afha/bogdan), 2014
+University of Cambridge
