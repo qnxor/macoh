@@ -1,22 +1,24 @@
 macoh
 =====
 
-Automated stress tests for measuring throttle and temperature on Macs
+Small tool which automatically downloads and installs the needed tools and a video, then transcodes (x264) the video using all cores, monitoring CPU temperature and frequency which are then plotted versus time. Overheating and/or throttling, if any, are easily spotted.
 
-It automatically downloads and installs the needed tools and a video to run an x264 transcoding, monitoring CPU temperature and frequency which are then plotted versus time. For now, this automatically does the following:
+For now, this automatically does the following:
 
-- grabs a number of free and open source tools
+- Grabs a number of free and open source tools
   - [Intel Power Gadget](https://software.intel.com/en-us/articles/intel-power-gadget-20) for measuring and logging temp, freq and power
   - [HandBrake CLI](http://handbrake.fr) for x264 encoding
   - [QGLE](http://glx.sourceforge.net) for plotting the results
-- grabs an open source movie
-  - [Big Buck Bunny](http://www.bigbuckbunny.org) (691 MB, 1080p)
-- performs an x264 transcoding of the movie into 720p using all CPU cores (about 8 minutes on a 2.3 GHz Core i7 Haswell)
+- Grabs an open source 1080p movie weighing 691 MB
+  - [Big Buck Bunny](http://www.bigbuckbunny.org)
+- Transcodes the movie via x264 into 720p using all CPU cores (about 8 minutes on a 2.3 GHz Core i7 Haswell)
 - monitors and logs CPU temperature and frequency while transcoding
 - plots a graph of temperature and frequency vs. time
 - reports max reached temp, max reached freq, duration and average encoding performance (FPS)
 
 The movie download may take a while depending on your connection. The other tools are much smaller.
+
+***Note*** that this is not meant to stress the CPU to unrealistic levels (like the Prime95 tool) but it is still above what even demanding tasks will achieve.
 
 ## Usage
 
