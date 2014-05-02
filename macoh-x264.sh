@@ -119,7 +119,7 @@ sleep 15" > $tmp/cmd-x264.sh
 
 	# run the x264 encoding
 	echo "Now executing the x264 transcode. This will take a while. Expect fans to go berserk in 30-60 sec ..."
-	#/Applications/Intel\ Power\ Gadget/PowerLog -resolution 300 -file $ipglog -cmd bash $tmp/cmd-x264.sh
+	/Applications/Intel\ Power\ Gadget/PowerLog -resolution 300 -file $ipglog -cmd bash $tmp/cmd-x264.sh
 	echo "Done."
 
 	# Prepare to plot graph from the csv output of IPG
