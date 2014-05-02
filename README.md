@@ -45,4 +45,12 @@ It writes only to your home folder, in `$HOME/Applications` (QGLE) and `$HOME/ma
 - Same for temp between start+wait+60sec and end-cool-5sec
 - Maybe also auto-upload the results and .png somewhere?
 
-[Bogdan Roman](http://www.damtp.cam.ac.uk/research/afha/bogdan), 2014, University of Cambridge
+## Feedback
+
+Let me know if it worked for you on a different CPU and/or Mac OS so I can update the compatibility list. If it didn't work for you then please [report it on GitHub](https://github.com/qnxor/macoh/issues).
+
+[Bogdan Roman](http://www.damtp.cam.ac.uk/research/afha/bogdan), University of Cambridge, 2014
+
+## Changelog
+
+- 1.0.0-alpha, 2014-05-02 - first version
