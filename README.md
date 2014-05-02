@@ -1,7 +1,7 @@
 macoh
 =====
 
-Small tool which automatically downloads and installs the needed tools and a video, then transcodes (x264) the video using all cores, monitoring CPU temperature and frequency which are then plotted versus time. Overheating and/or throttling, if any, are easily spotted.
+Small tool for Mac OS X that automatically downloads and installs the needed tools and a video, then transcodes (x264) the video using all cores, monitoring CPU temperature and frequency which are then plotted versus time. Overheating and/or throttling, if any, are easily spotted.
 
 I use it, but help with testing will be appreciated. For now, this automatically does the following:
 
@@ -16,7 +16,7 @@ I use it, but help with testing will be appreciated. For now, this automatically
 - plots a graph of temperature and frequency vs. time
 - reports max reached temp, max reached freq, duration and average encoding performance (FPS)
 
-**Tested:** Tested on a fresh Mavericks 10.9.2 but should work on most recent Mac OSX versions. Let me know if it worked for you on a different Mac OS so I can update the compatibility list. Please [report](https://github.com/qnxor/macoh/issues) if it doesn't work.
+**Tested:** Tested on a fresh Mavericks 10.9.2, Hasswell Core i7-4850HQ, but should work on most recent Mac OSX versions and CPUs. Let me know if it worked for you on a different CPU and/or Mac OS so I can update the compatibility list. Please [report](https://github.com/qnxor/macoh/issues) if it doesn't work.
 
 **Stress:** This tool is not meant to stress the CPU to unrealistic levels (like, for intstance, Prime95) but it is still above what even demanding tasks will achieve. It does not yet stress test the GPU; that's planned for later.
 
