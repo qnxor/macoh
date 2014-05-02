@@ -22,11 +22,11 @@ I use it, but help with testing will be appreciated. For now, this automatically
 
 ## Usage
 
-- Donwload and extract `macoh-x264.sh` somewhere in your home folder
-- Do `chmod u+x ~/macoh-x264.sh`
+- Donwload and extract `macoh-x264.sh` in your home folder
+- Then in Terminal do `chmod u+x ~/macoh-x264.sh`
 - Then do `~/macoh-x264.sh`
 
-That's about it. It will tell you what it does/needs. You can optionally do `~/macoh-x264.sh NAME` where `NAME` is some identifier for the test, by default `NAME` will be the current date and time in the format `yyyymmdd-HHMMSS`.
+That's about it. It will report what it does/needs. You can optionally do `~/macoh-x264.sh NAME` where `NAME` is some identifier for the test, by default `NAME` will be the current date and time in the format `yyyymmdd-HHMMSS`.
 
 It writes only to your home folder, in `$HOME/Applications` (QGLE) and `$HOME/macoh` (everything else). The only exception is the Intel Power Gadget which is installed in /Applications. All tools can be uninstalled and erased easily (see Todo).
 
