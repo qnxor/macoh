@@ -10,7 +10,7 @@ set -e
 testid=`date +%Y%m%d-%H%M%S`
 
 while [[ -n $@ ]]; do
-	[[ ${1:0:1} = - ]] && task=moh-${1:1} || testid=$1
+	[[ ${1:0:1} = - ]] && action=moh-${1:1} || testid=$1
 	shift
 done
 
@@ -109,7 +109,7 @@ moh-check-sane () {
 	[[ -r $home/done-video && -r $home/$mov ]] || moh-get-video force
 }
 
-moh-launch () {
+moh-start () {
 	echo
 	
 	# Delete temp (downloaded) files? Nah ...
@@ -213,8 +213,8 @@ See $graph for the full graph.
 }
 
 # specified what to do?
-if [[ -n $task ]]; then
-	$task
+if [[ -n $action ]]; then
+	$action
 	exit $?
 fi 
 
@@ -241,8 +241,8 @@ Your choice: [q] "
 	[[ $ans = 2 ]] && moh-get-ipg && continue
 	[[ $ans = 3 ]] && moh-get-gle && continue
 	[[ $ans = 4 ]] && moh-get-video && continue
-	[[ $ans = 0 ]] && moh-launch && exit
+	[[ $ans = 0 ]] && moh-start && exit
 	[[ $ans = x ]] && moh-plot && exit
 	#[[ $ans = a || $ans = A ]] && moh-get-handbrake && moh-get-ipg \
-	#	&& moh-get-gle && moh-get-movie && moh-launch && exit
+	#	&& moh-get-gle && moh-get-movie && moh-start && exit
 done 
