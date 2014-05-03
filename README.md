@@ -54,4 +54,5 @@ You can also reach me at http://www.damtp.cam.ac.uk/research/afha/bogdan
 
 ## Changelog
 
+- 1.0.1-alpha, 2014-05-03 - added command line options to bypass menu
 - 1.0.0-alpha, 2014-05-02 - first version
