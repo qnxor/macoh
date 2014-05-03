@@ -1,9 +1,9 @@
 MacOH
 =====
 
-Small tool for Mac OS X that automatically downloads and installs the needed tools and a video, then transcodes (x264) the video using all cores, monitoring CPU temperature and frequency which are then plotted versus time. Overheating and/or throttling, if any, are easily spotted. See a [sample graph output](http://www.damtp.cam.ac.uk/research/afha/people/bogdan/macoh/graph.gif) (no throttling there).
+Small tool for Mac OS X that automatically downloads and installs the needed tools and a video, then transcodes (x264) the video using all cores, monitoring CPU temperature and frequency which are then plotted versus time. CPU throttling and/or overheating, if any, are easily spotted. See a [sample graph output](http://www.damtp.cam.ac.uk/research/afha/people/bogdan/macoh/graph.gif) (no throttling there).
 
-For now, this automatically does all of the following:
+For now, it automatically does all of the following:
 
 - Grabs needed free and open source tools: [Intel Power Gadget](https://software.intel.com/en-us/articles/intel-power-gadget-20) (measuring and logging), [HandBrake CLI](http://handbrake.fr) (x264 transcoding), [GLE](http://glx.sourceforge.net) (plotting)
 - Grabs the free movie [Big Buck Bunny](http://www.bigbuckbunny.org) in 1080p (692 MB)
@@ -12,7 +12,7 @@ For now, this automatically does all of the following:
 - Plots a graph of temperature and frequency vs. time
 - Reports max reached temp, duration and encoding performance (FPS)
 
-**Stress:** This tool is not meant to put unrealistically high stress on the CPU (like, for example, Prime95) but it does put more stress than many very demanding tasks. GPU stress is planned for th enext version (see [Todo](#todo)).
+**Stress:** It's not meant to put unrealistically high stress on the CPU (like, for example, Prime95) but it does stress it more than most demanding tasks. GPU stress is planned for the next version (see [Todo](#todo)).
 
 **Disclaimer:** As per the usual nitty gritty, I cannot be held responsible if your spouse leaves you as a result of running this tool, or worse: if your Mac gets damaged. Most likely you'll be just fine though.
 
@@ -20,17 +20,17 @@ For now, this automatically does all of the following:
 
 Simple:
 
-- Donwload and extract `macoh-x264.sh` somewhere
-- Open Terminal and do `bash macoh-x264.sh`
-- Choose 0 from the (old school) command menu
+1. Donwload and extract `macoh-x264.sh` somewhere
+1. Open Terminal and do `bash macoh-x264.sh`
+1. Choose 0 from the (old school) command menu
 
-It also accepts optional arguments as `macoh-x264.sh [-ACTION] [NAME]`, where `NAME` is an identifier prepended to output files, by default the current date as `yyyymmdd-HHMMSS`, which must not start with a dash `-`. You can skip the menu by specifying `-ACTION` as either: `-launch`, `-get-handbrake`, `-get-ipg`, `-get-video` or `-get-gle`. 
+It accepts optional arguments: `macoh-x264.sh [-ACTION] [NAME]`, where `NAME` is an identifier prepended to output files which must not start with a dash `-`; default is the current date as `yyyymmdd-HHMMSS`. You can skip the menu by specifying `-ACTION` as either `-start`, `-get-handbrake`, `-get-ipg`, `-get-video` or `-get-gle`. 
 
 For example, `macoh-x264.sh -start run1` will launch the process, downloading and installing as needed (skipping if it had already done those steps), and generating `~/macoh/run1-graph.gif`, `~/macoh/logs/run1-ipg.csv` and `~/macoh/logs/run1-hb.log`.
 
 You can make it executable with `chmod u+x macoh-x264.sh` if you wish, and then do `./macoh-x264.sh`.
 
-The scripts downloads and writes only to your home folder, in `$HOME/Applications` (GLE) and `$HOME/macoh` (everything else). The only exception is the Intel Power Gadget which is installed in /Applications. See [Todo](#todo) for uninstall.
+It downloads and writes only to your home dir, in `$HOME/Applications` (GLE) and `$HOME/macoh` (everything else). The only exception is Intel Power Gadget which is installed in /Applications. See [Todo](#todo) for uninstall.
 
 ## Feedback
 
