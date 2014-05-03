@@ -6,14 +6,20 @@
 #
 
 set -e
+
+testid=`date +%Y%m%d-%H%M%S`
+
+while [[ -n $@ ]]; do
+	[[ ${1:0:1} = - ]] && task=moh-${1:1} || testid=$1
+	shift
+done
+
 home=~/macoh
 tmp=$home/tmp
 bin=$home/bin
 logs=$home/logs
 mov=big_buck_bunny_1080p_h264.mov
 mkv=$home/big_buck_bunny_1080p_h264_transcoded.mkv
-# Generate or read id to use for the log files
-[[ -n $1 ]] && testid=$1 || testid=`date +%Y%m%d-%H%M%S`
 ipglog=$logs/$testid-ipg.csv
 hblog=$logs/$testid-hb.log
 graph=$home/$testid-graph.png
@@ -35,7 +41,7 @@ wget () {
 		curl -o "$@"
 }
 
-moh_get_handbrake () {
+moh-get-handbrake () {
 	echo 
 	local ans=y
 	[[ -x $bin/HandBrakeCLI && $1 != force ]] && read -p "HandBrake CLI seems to exist in $bin. Redownload? [n] " ans
@@ -50,7 +56,7 @@ moh_get_handbrake () {
 	fi
 }
 
-moh_get_ipg () {
+moh-get-ipg () {
 	echo 
 	local ans=y
 	[[ -d /Applications/Intel\ Power\ Gadget && $1 != force ]] && read -p "Intel Power Gadget seems to be installed. Redownload? [n] " ans
@@ -67,7 +73,7 @@ moh_get_ipg () {
 	fi
 }
 
-moh_get_gle () {
+moh-get-gle () {
 	echo
 	local ans=y
 	[[ -d ~/Applications/QGLE.app && $1 != force ]] && read -p "QGLE seems to be installed. Redownload? [n] " ans
@@ -82,7 +88,7 @@ moh_get_gle () {
 	fi
 }
 
-moh_get_video () {
+moh-get-video () {
 	echo
 	local ans=y
 	[[ -r $home/$mov && $1 != force ]] && read -p "The video file seems exist in $home. Redownload? [n] " ans
@@ -94,20 +100,23 @@ moh_get_video () {
 	fi
 }
 
-moh_check_sane () {
+moh-check-sane () {
 	# check if all components are sane and redownload+reinstall if not
 	# TODO: better method for detecting if sane
-	[[ -r $bin/done-handbrake && -x $bin/HandBrakeCLI ]] || moh_get_handbrake force
-	[[ -r $bin/done-ipg && -d /Applications/Intel\ Power\ Gadget ]] || moh_get_ipg force
-	[[ -r $bin/done-gle && -d ~/Applications/QGLE.app ]] || moh_get_gle force
-	[[ -r $home/done-video && -r $home/$mov ]] || moh_get_video force
+	[[ -r $bin/done-handbrake && -x $bin/HandBrakeCLI ]] || moh-get-handbrake force
+	[[ -r $bin/done-ipg && -d /Applications/Intel\ Power\ Gadget ]] || moh-get-ipg force
+	[[ -r $bin/done-gle && -d ~/Applications/QGLE.app ]] || moh-get-gle force
+	[[ -r $home/done-video && -r $home/$mov ]] || moh-get-video force
 }
 
-moh_launch () {
+moh-launch () {
 	echo
 	
 	# Delete temp (downloaded) files? Nah ...
 	#rm -rf $tmp/*
+
+	# check sanity
+	moh-check-sane
 
 	# We need to pass a command to IPG's PowerLog.
 	# Make it a file (had too much hassle passing it as string to PowerLog)
@@ -118,10 +127,15 @@ echo Cooling off for 15 seconds ...
 sleep 15" > $tmp/cmd-x264.sh
 
 	# run the x264 encoding
-	echo "Executing the x264 transcode. This will take a while. Expect the fans to go berserk soon ..."
+	echo "Now executing the x264 transcode. This will take a while. Expect fans to go berserk in 30-60 sec ..."
 	/Applications/Intel\ Power\ Gadget/PowerLog -resolution 300 -file $ipglog -cmd bash $tmp/cmd-x264.sh
 	echo "Done."
+	
+	# plot result
+	moh-plot
+}
 
+moh-plot () {
 	# Prepare to plot graph from the csv output of IPG
 	cat - >$tmp/ipg.gle <<'GLE'
 papersize 20 10
@@ -136,12 +150,13 @@ begin graph
    data arg$(1) ignore 1 d1=c1,c9 d2=c1,c2
    axis grid
    subticks on
-   ticks color grey40
+   ticks color grey10
    subticks lstyle 2
-   yaxis min 0 max 110 dticks 10 dsubticks 5
-   y2axis min 300 max 3600 dticks 300 dsubticks 150
+   yaxis min 20 max 110 dticks 10 dsubticks 2.5
+   y2axis min 400 max 4000 dticks 200 dsubticks 100
+   !y2axis min 600 max 3300 nticks 9
    !xnames from d1
-   key pos bl offset 0.25 0.25
+   key pos bl offset 1.25 0.25
    d1 line color red key arg$(3)
    d2 x2axis y2axis line color blue key arg$(4)
 end graph
@@ -197,6 +212,13 @@ See $graph for the full graph.
 		open $graph
 }
 
+# specified what to do?
+if [[ -n $task ]]; then
+	$task
+	exit $?
+fi 
+
+# if not, show menu
 while [[ 1 ]]; do
 	echo -n "
 -----------------------------------------------------------------------
@@ -205,7 +227,7 @@ Automated x264 benchmark. Best to quit all other apps before launching.
   1. Fetch Handbrake (6.9 MB)
   2. Fetch Intel Power Gadget (2.3 MB)
   3. Fetch QGLE (13.2 MB)
-  4. Fetch Big Buck Bunnie movie (692 MB)
+  4. Fetch Big Buck Bunny movie (692 MB)
 
   0. Launch x264 transcoding (does the above as needed)
 
@@ -215,11 +237,12 @@ Your choice: [q] "
 	read ans
 	echo
 	[[ -z $ans || $ans = q || $ans = Q ]] && exit 0
-	[[ $ans = 1 ]] && moh_get_handbrake && continue
-	[[ $ans = 2 ]] && moh_get_ipg && continue
-	[[ $ans = 3 ]] && moh_get_gle && continue
-	[[ $ans = 4 ]] && moh_get_video && continue
-	[[ $ans = 0 ]] && moh_check_sane && moh_launch && exit
-	#[[ $ans = a || $ans = A ]] && moh_get_handbrake && moh_get_ipg \
-	#	&& moh_get_gle && moh_get_movie && moh_launch && exit
+	[[ $ans = 1 ]] && moh-get-handbrake && continue
+	[[ $ans = 2 ]] && moh-get-ipg && continue
+	[[ $ans = 3 ]] && moh-get-gle && continue
+	[[ $ans = 4 ]] && moh-get-video && continue
+	[[ $ans = 0 ]] && moh-launch && exit
+	[[ $ans = x ]] && moh-plot && exit
+	#[[ $ans = a || $ans = A ]] && moh-get-handbrake && moh-get-ipg \
+	#	&& moh-get-gle && moh-get-movie && moh-launch && exit
 done 
