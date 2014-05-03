@@ -12,7 +12,7 @@ For now, it automatically does all of the following:
 - Plots a graph of temperature and frequency vs. time
 - Reports max reached temp, duration and encoding performance (FPS)
 
-**Stress:** It's not meant to put unrealistically high stress on the CPU (like, for example, Prime95) but it does stress it more than most demanding tasks. GPU stress is planned for the next version (see [Todo](#todo)).
+**Stress:** It's not meant to put unrealistically high stress on the CPU (like, for example, Prime95) but it does stress the CPU more than most demanding apps out there. GPU stress is planned for the next version (see [Todo](#todo)).
 
 **Disclaimer:** As per the usual nitty gritty, I cannot be held responsible if your spouse leaves you as a result of running this tool, or worse: if your Mac gets damaged. Most likely you'll be just fine though.
 
