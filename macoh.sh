@@ -7,26 +7,91 @@
 
 set -e
 
-testid=`date +%Y%m%d-%H%M%S`
-
-while [[ -n $@ ]]; do
-	[[ ${1:0:1} = - ]] && action=moh-${1:1} || testid=$1
-	shift
-done
-
+conf="${0%.*}.conf"
 home=~/macoh
+testid=`date +%Y%m%d-%H%M%S`
+usercmd=''
+waitstart=15
+waitend=15
+timeout=180
+gputest=fur
+gpuwidth=1280
+gpuheight=720
+gpumsaa=2
+p95minfft=8
+p95maxfft=8
+p95mem=8
+p95timefft=5
+p95nice=10
 tmp=$home/tmp
 bin=$home/bin
 logs=$home/logs
 mov=big_buck_bunny_1080p_h264.mov
-mkv=$home/big_buck_bunny_1080p_h264_transcoded.mkv
+# mkv=$home/big_buck_bunny_1080p_h264_transcoded.mkv
+mkv=/dev/null
+gpuswitch=''
+
+url_ipg="https://software.intel.com/sites/default/files/IntelPowerGadget3.0.1.zip"
+url_handbrake="http://heanet.dl.sourceforge.net/project/handbrake/0.9.9/HandBrake-0.9.9-MacOSX.6_CLI_x86_64.dmg"
+url_gle="http://heanet.dl.sourceforge.net/project/glx/gle4%20(Current%20Active%20Version)/4.2.4c/gle-graphics-4.2.4c-exe-mac.dmg"
+url_video="http://blender-mirror.kino3d.org/peach/bigbuckbunny_movies/big_buck_bunny_1080p_h264.mov"
+url_prime95="ftp://mersenne.org/gimps/p95v285.MacOSX.zip"
+url_gputest="http://www.ozone3d.net/gputest/dl/GpuTest_OSX_x64_0.7.0.zip"
+url_gputest_referer="http://www.geeks3d.com/20140304/gputest-0-7-0-opengl-benchmark-win-linux-osx-new-fp64-opengl-4-test-and-online-gpu-database/"
+url_gfx="https://github.com/qnxor/macoh/raw/master/gfxCardStatus.tgz"
+url_im="http://www.imagemagick.org/download/binaries/ImageMagick-x86_64-apple-darwin13.1.0.tar.gz"
+
+gputesttypes='fur, tess_x8, tess_x16, tess_x32, tess_x64, gi, pixmark_piano, pixmark_volplosion, plot3d, triangle'
+gpulist=()
 ipglog=$logs/$testid-ipg.csv
 hblog=$logs/$testid-hb.log
-graph=$home/$testid-graph.png
-graphgif=$home/$testid-graph.gif
 
+ERR_CMDLINE=11
+
+# Load user conf only for the menu (otherwise the defaults are altered)
+[[ -r "$conf" && ! $@ =~ -do\ [a-zA-Z] ]] && source "$conf"
+
+# Parse cmd line args ... a bit of a hack job for now
+while [[ -n $@ ]]; do
+	# -cmd must be the last option, everything after it is considered one command (with arguments)
+	[[ $1 = -c || $1 = -cmd       ]] && action=moh-cmd && shift && usercmd="$@" && break
+	[[ $1 = -w || $1 = -wait      ]] && waitstart=${2:-15} && waitend=${2:-15} && shift 2 && continue
+	[[ $1 = -t || $1 = -time      ]] && timeout=${2:-0} && shift 2 && continue
+	[[ $1 = -do                   ]] && action=moh-$2 && shift 2 && continue
+	[[ $1 = -get                  ]] && action=moh-get-$2 && shift 2 && continue
+	[[ $1 = -r || $1 = -res       ]] && gpuwidth=${2/x*/} && gpuwidth=${2/*x/} && shift 2 && continue
+	[[ $1 = -m || $1 = -msaa      ]] && gpumsaaa=$2 && shift 2 && continue
+	[[ $1 = -s || $1 = -gpuswitch ]] && gpuswitch=$2 && shift 2 && continue
+	[[ $1 = -g || $1 = -gputest   ]] && gputest=$2 && shift 2 && continue
+	[[ $1 = -plot                 ]] && testid=$2 && action=moh-plot && shift 2 && continue
+	[[ $1 = -name                 ]] && testname=$2 && shift 2 && continue
+	echo "Error: Unrecognized option: $1. Exiting ..." >&2
+	exit 12
+done
+
+# Internal vars
+duration=0
+hduration=0
+code=''
+testname='custom'
+
+# Validate input
+[[ ! $waitstart -gt 0 ]] && echo "Error: -w/-wait requires a positive integer." >&2 && exit $ERR_CMDLINE
+[[ ! $waitend -gt 0   ]] && echo "Error: -w/-wait requires a positive integer." >&2 && exit $ERR_CMDLINE
+[[ ! $gpuwidth -gt 0 || ! $gpuheight -gt 0 ]] \
+	&& echo "Error: -r/-res requires MxM, where M and N are positive integers." >&2 && exit $ERR_CMDLINE
+[[ ! $gpumsaa =~ ^[0248]$ ]] && echo "Error: -m/-msaa requires 0, 2, 4 or 8." >&2 && exit $ERR_CMDLINE
+[[ ! $timeout -gt 0 ]] && echo "Error: -t/-time requires a positive integer." >&2 && exit $ERR_CMDLINE
+[[ ! ", $gputesttypes, " = *", $gputest, "*  ]] \
+	&& echo "Error: -g/-gputest requires one of: $gputesttypes." >&2 && exit $ERR_CMDLINE
+
+# Create needed dirs
 mkdir -p $home $logs $tmp $bin
 
+
+#------------------------------- Functions -------------------------------#
+
+# Some useful functions
 mnt () { 
 	hdiutil attach "$1" >/dev/null
 }
@@ -34,21 +99,65 @@ umnt () {
 	diskutil unmount "$1" >/dev/null
 }
 wget () {
-	#local ans=y
-	#[[ -r "$1" ]] && read -p "File exists, redownload? [n] " ans
-	#[[ $ans = y || $ans = Y ]] && \
-		#curl -# -o "$1" "$2"
-		curl -o "$@"
+	curl -L -o "$@"
+}
+stddev () {
+	# awk '{ delta = $1 - avg; avg += delta / NR; mean2 += delta * ($1 - avg); } END { print sqrt(mean2 / NR); }'
+	awk '{sum+=$1; sumsq+=$1*$1} END {print sqrt(sumsq/NR - (sum/NR)**2)}'
+}
+mean () {
+	awk '{ delta = $1 - avg; avg += delta / NR; } END { print avg; }'
+}
+humantime () {
+	[[ $t -ge 86400 ]] && echo -n $(($1/86400))d
+	[[ $1 -ge 3600  ]] && echo -n $((($1%86400)/3600))h
+	# [[ $1 -ge 60    ]] && echo -n $((($1%3600)/60))m
+	echo $((($1%3600)/60))m$(($1%60))s
+}
+editconf () {
+	local val
+	[[ $2 =~ ^[0-9]+$ ]] && val=$2 || val="'$2'"
+	eval "$1=$val"
+	cp -f "$conf" "$conf~"
+	sed -E "s:^$1=.*:$1=${val//:/\\:}:" "$conf~" > "$conf"
+}
+silentkill () {
+	# Die with dignity. Kill if stubborn.
+	# Add brackets ( ) around bg processes so we suppress "stopped" messsages
+	( { sleep 0.25; kill -TERM $* &>/dev/null; } & )
+	( { sleep 3; kill -KILL $* &>/dev/null; } & )
+	# The 'wait' trick only works for subprocess of the current shell, should be fine
+	# It suppresses the "terminated" background messages.
+	# "wait" returns 127 if process not found (thanks!). We return 0 always.
+	wait $* &>/dev/null || return 0
+}
+set-imagick () {
+	local im
+	if [[ -d $bin/ImageMagick ]]; then
+		export MAGICK_HOME="$bin/ImageMagick"
+		export DYLD_LIBRARY_PATH="$MAGICK_HOME/lib/"
+		[[ "$PATH" = *"$MAGICK_HOME/bin"* ]] || export PATH="$MAGICK_HOME/bin:$PATH"
+	fi
+}
+anykey () {
+	local msg="Press any key to continue ..."
+	[[ -n $1 ]] && msg="$@"
+	echo $msg
+	read -s -n 1
 }
 
-moh-get-handbrake () {
+moh-get-handbrake ()
+{
 	echo 
 	local ans=y
-	[[ -x $bin/HandBrakeCLI && $1 != force ]] && read -p "HandBrake CLI seems to exist in $bin. Redownload? [n] " ans
+	# md5=d426eae09825284c8a4b66d55cafeeb4
+	[[ -x $bin/HandBrakeCLI && $1 != force ]] && \
+		read -p "HandBrake CLI seems to exist in $bin. Redownload? [n] " ans
 	if [[ $ans = y || $ans = Y ]]; then
+		set -e
 		rm -f $bin/done-handbrake
 		echo Fetching HandBrake CLI into $bin ...
-		wget $tmp/HandBrake-0.9.9-MacOSX.6_CLI_x86_64.dmg -# "http://heanet.dl.sourceforge.net/project/handbrake/0.9.9/HandBrake-0.9.9-MacOSX.6_CLI_x86_64.dmg"
+		wget $tmp/HandBrake-0.9.9-MacOSX.6_CLI_x86_64.dmg "$url_handbrake" -#
 		mnt $tmp/HandBrake-0.9.9-MacOSX.6_CLI_x86_64.dmg
 		cp -f /Volumes/HandBrake-0.9.9-MacOSX.6_CLI_x86_64/HandBrakeCLI $bin
 		umnt /Volumes/HandBrake-0.9.9-MacOSX.6_CLI_x86_64
@@ -56,14 +165,17 @@ moh-get-handbrake () {
 	fi
 }
 
-moh-get-ipg () {
+moh-get-ipg ()
+{
 	echo 
 	local ans=y
+	# md5=5e3f984efdf04fa608ef1ba35d1309fe
 	[[ -d /Applications/Intel\ Power\ Gadget && $1 != force ]] && read -p "Intel Power Gadget seems to be installed. Redownload? [n] " ans
 	if [[ $ans = y || $ans = Y ]]; then
+		set -e
 		rm -f $bin/done-ipg
 		echo "Fetching and installing Intel Power Gadget into /Applications ..."
-		wget $tmp/ipg.zip "https://software.intel.com/sites/default/files/IntelPowerGadget3.0.1.zip" -#
+		wget $tmp/ipg.zip "$url_ipg" -#
 		unzip -q -o $tmp/ipg.zip -d $tmp
 		mnt $tmp/Intel*.dmg
 		echo "You need to provide your Mac system password to install Intel Power Gadget. "
@@ -73,138 +185,567 @@ moh-get-ipg () {
 	fi
 }
 
-moh-get-gle () {
+moh-get-gle ()
+{
 	echo
 	local ans=y
-	[[ -d ~/Applications/QGLE.app && $1 != force ]] && read -p "QGLE seems to be installed. Redownload? [n] " ans
+	# md5=021e612a678cce8f2f8b1425fec1d0b5
+	[[ -d $bin/QGLE.app && $1 != force ]] && read -p "QGLE seems to be installed. Redownload? [n] " ans
 	if [[ $ans = y || $ans = Y ]]; then
+		set -e
 		rm -f $bin/done-gle
-		echo "Fetching QGLE into ~/Applications ..."
-		wget $tmp/gle.dmg "http://heanet.dl.sourceforge.net/project/glx/gle4%20(Current%20Active%20Version)/4.2.4c/gle-graphics-4.2.4c-exe-mac.dmg" -#
+		echo Fetching Graphics Layout Engine into $bin ...
+		wget $tmp/gle.dmg "$url_gle" -#
 		mnt $tmp/gle.dmg
-		cp -r /Volumes/gle-graphics-*/QGLE.app ~/Applications
+		[[ -d $bin/QGLE.app ]] && rm -rf $bin/QGLE.app
+		cp -r /Volumes/gle-graphics-*/QGLE.app $bin
 		umnt /Volumes/gle-graphics-*
 		> $bin/done-gle
 	fi
 }
 
-moh-get-video () {
+moh-get-video ()
+{
 	echo
 	local ans=y
+	# md5=c23ab2ff12023c684f46fcc02c57b585
 	[[ -r $home/$mov && $1 != force ]] && read -p "The video file seems exist in $home. Redownload? [n] " ans
 	if [[ $ans = y || $ans = Y ]]; then
+		set -e
 		rm -f $home/done-video
 		echo "Fetching The Big Buck Bunny movie (692 MB) into $home. This may take a while ..."
-		wget $home/$mov "http://blender-mirror.kino3d.org/peach/bigbuckbunny_movies/$mov" -#
+		wget $home/$mov "$url_video" -#
 		> $home/done-video
 	fi
 }
 
-moh-check-sane () {
-	# check if all components are sane and redownload+reinstall if not
-	# TODO: better method for detecting if sane
-	[[ -r $bin/done-handbrake && -x $bin/HandBrakeCLI ]] || moh-get-handbrake force
+moh-get-prime95 ()
+{
+	echo
+	local ans=y
+	# md5=0390ae2ff3d4a7082927482d82e62f59
+	[[ -d $bin/Prime95.app && $1 != force ]] && \
+		read -p "Prime95 seems to be installed. Redownload? [n] " ans
+	if [[ $ans = y || $ans = Y ]]; then
+		set -e
+		rm -f $bin/done-prime95
+		echo Fetching Prime95 into $bin ...
+		wget $tmp/prime95.zip "$url_prime95" -#
+		# zip file from mersenne.org causes unzip to exit with 1, even though it extracts ok
+		if ! unzip -q -o $tmp/prime95.zip -d $tmp 2>$tmp/unziperr.log; then
+			local e=$?
+			sed -E '/ucsize [0-9]* <> csize|continuing with/d' $tmp/unziperr.log | \
+				grep -qE '.' && cat $tmp/unziperr.log && exit $e
+		fi
+		[[ -d $bin/Prime95.app ]] && rm -rf $bin/Prime95.app
+		cp -rf $tmp/Prime95.app $bin
+		rm -rf $tmp/Prime95.app
+		chmod 755 $bin/Prime95.app/Contents/MacOS/Prime95
+		> $bin/done-prime95
+	fi
+}
+
+moh-get-gputest ()
+{
+	echo
+	local ans=y
+	# md5=b3dbe739f64336b1f0752149c495dbf4
+	[[ -d $bin/GpuTest.app && $1 != force ]] && \
+		read -p "GpuTest seems to be installed. Redownload? [n] " ans
+	if [[ $ans = y || $ans = Y ]]; then
+		set -e
+		rm -f $bin/done-gputest
+		echo Fetching GpuTest into $bin ...
+		wget $tmp/gputest.zip "$url_gputest" -# --referer "$url_gputest_referer"
+		unzip -q -o $tmp/gputest.zip -d $tmp
+		[[ -d $bin/GpuTest.app ]] && rm -rf $bin/GpuTest.app
+		cp -rf $tmp/GpuTest.app $bin
+		rm -rf $tmp/GpuTest.app
+		chmod 755 $bin/GpuTest.app/Contents/MacOS/GpuTest
+		> $bin/done-gputest
+	fi
+}
+
+moh-get-gfx ()
+{
+	echo
+	local ans=y
+	# md5=1cecb1974a1d5c374dfd180a5e7b828e
+	# [[ ( -d $bin/gfxCardStatus.app || -d /Applications/gfxCardStatus.app ) && $1 != force ]] && \
+	[[ -d $bin/gfxCardStatus.app && $1 != force ]] && \
+		read -p "gfxCardStatus seems to be installed. Redownload? [n] " ans
+	if [[ $ans = y || $ans = Y ]]; then
+		set -e
+		rm -f $bin/done-gfx
+		echo Fetching gfxCardStatus into $bin ...
+		wget $tmp/gfxCardStatus.tgz "$url_gfx" -#
+		[[ -d $bin/gfxCardStatus.app ]] && rm -rf $bin/gfxCardStatus.app
+		tar -C $bin -zxf $tmp/gfxCardStatus.tgz
+		> $bin/done-gfx
+	fi
+}
+
+moh-start-gfx () {
+	open "$dest/gfxCardStatus.app"
+	echo
+	echo "gfxCardStatus installed and started, it should appear on the menu bar. Click it to select which GPU to use for 3D if you have both an integrated and discrete GPU."
+	[[ -n $action ]] && anykey
+}
+
+# Fetch and install a local copy of ImageMagick
+moh-get-imagick ()
+{
+	echo
+	local d ans=y
+	# md5=1cecb1974a1d5c374dfd180a5e7b828e
+	[[ -d $bin/ImageMagick-* && $1 != force ]] && \
+		read -p "ImageMagick seems to be installed. Redownload? [n] " ans
+	if [[ $ans = y || $ans = Y ]]; then
+		set -e
+		rm -f $bin/done-imagick
+		echo Fetching ImageMagick into $bin ...
+		wget $tmp/imagemagick.tgz "$url_im" -#
+		tar -C $bin -zxf $tmp/imagemagick.tgz
+		mv $bin/ImageMagick-* $bin/ImageMagick
+		> $bin/done-imagick
+	fi
+	set-imagick
+}
+
+# Check mandatory packages
+moh-check-common () {
 	[[ -r $bin/done-ipg && -d /Applications/Intel\ Power\ Gadget ]] || moh-get-ipg force
-	[[ -r $bin/done-gle && -d ~/Applications/QGLE.app ]] || moh-get-gle force
+	[[ -r $bin/done-gle && -d $bin/QGLE.app ]] || moh-get-gle force
+	[[ -r $bin/done-imagick && -d $bin/ImageMagick ]] || moh-get-imagick force
+}
+
+# Check if all x264 test dependencies exist and download/install if not
+moh-check-x264 ()
+{
+	moh-check-common
+	[[ -r $bin/done-handbrake && -x $bin/HandBrakeCLI ]] || moh-get-handbrake force
 	[[ -r $home/done-video && -r $home/$mov ]] || moh-get-video force
 }
 
-moh-start () {
+# Check if all Prime95 test dependencies exist and download/install if not
+moh-check-prime95 ()
+{
+	moh-check-common
+	[[ -r $bin/done-prime95 && -d $bin/Prime95.app ]] || moh-get-prime95 force
+}
+
+# Check if all Prime95 test dependencies exist and download/install if not
+moh-check-gputest ()
+{
+	moh-check-common
+	[[ -r $bin/done-gputest && -d $bin/GpuTest.app ]] || moh-get-gputest force
+}
+
+# Check packages for a user defined command
+moh-check-usercmd ()
+{
+	moh-check-common
+}
+
+# Check packages for a user defined command
+moh-check-gfx ()
+{
+	[[ -r $bin/done-gfx && -d $bin/gfxCardStatus.app ]] || moh-get-gfx force
+}
+
+## Wrapper to start, monitor and log any job which is read from stdin
+## usage wrapper NAME TIMEOUT
+## - NAME is a short no-spaces name of the job, e.g. x264-long
+## - TIMEOUT is a duration in seconds after which the test is forcefully killed
+##   Use 0 to disable the timeout.
+wrapper ()
+{
 	echo
+
+	# set test name (displayed in the graph title)
+	testname=$1
+
+	# Prepare script file to pass to Intel Power Gadget
+	local cmdfile=$tmp/cmd-$1.sh
+
+	local code=$(</dev/stdin) 	# Benchmark code passed via stdin
+	local sudo 					# Code to deal with sudo
+	local handbrake 			# Code to deal with HandBrake (cpu priority)
+	local watchdog 				# Code to deal with max duration (timeout)
+
+	# Does the code run HandBrakeCLI? It changes its nice level to 19 after it
+	# starts so we can't start it with nice -n 0 HandBrakeCLI. Prepend a
+	# background loop to poll for it and renice it once detected
+	[[ $code =~ HandBrakeCLI ]] && handbrake='
+	echo "CPU priority of HandBrake will be raised (sudo)."
+	for ((i=0;i<120;i++)); do
+		sleep 1
+		pid=`pgrep HandBrakeCLI` && { sleep 2; sudo renice -10 -p $pid; break; }
+	done &'
+
+	# Timeout needed?
+	# Add a pair of brackets ( ) around bg processes to suppress "terminated"
+	# messages from the shell .. neat. Unforturnately, we can't suppress all of
+	# them since the test is running in the fg and is killed by a bg process,
+	# so the shell informs the user of the death of the fg process ... the bg
+	# process can't prevent that. We could swap the fg and bg processes, but
+	# then the test would run in bg which is more hassle to handle (though we
+	# have bash's "wait" function)
+	[[ $2 -gt 0 ]] && watchdog=$(declare -f silentkill)'
+	echo "Waiting max '$(humantime $2)' to terminate."
+	( sleep '$2'; pids=`pgrep -P $$` && { sleep 3 && kill -KILL $pids &>/dev/null & } && kill -TERM $pids; ) &>/dev/null &
+	# { sleep '$2'; pids=`pgrep -P $$ 2>/dev/null` && silentkill $pids; } &
+	'
+
+	# Is the code using sudo? If so, ask for the password now to avoid the
+	# password prompt being ocluded later by the wrapping scripts which may
+	# redirect stdout/stderr.
+	[[ -n $handbrake || $code =~ sudo[[:space:]] ]] \
+		&& sudo='echo Sudo detected. It may ask you to enter your Mac password. && sudo echo'
+
+	# Build script file to pass to Intel Power Gadget
+	cat > $cmdfile <<-SH
+		#!/bin/bash
+		echo
+		$handbrake
+		$sudo
+		echo Waiting $waitstart seconds to capture idle temperature ...
+		sleep $waitstart
+		echo Starting $testname benchmark. May take a while and fans may go berserk ...
+		$watchdog
+		$code
+		echo Test finished. Cooling off for $waitend seconds ...
+		sleep $waitend
+	SH
+	chmod 700 $cmdfile
+
+	# Is the code using sudo? If so, ask for the password now to avoid the
+	# password prompt being ocluded later by the wrapping scripts which may
+	# redirect stdout/stderr.
+	[[ $code =~ sudo[[:space:]] ]] && \
+		echo Sudo may ask you to enter your Mac password. && sudo echo
 	
-	# Delete temp (downloaded) files? Nah ...
-	#rm -rf $tmp/*
+	# Finally ... Go!
+	local timestart=$(date +%s)
+	/Applications/Intel\ Power\ Gadget/PowerLog -resolution 500 -file $ipglog -cmd $cmdfile
+	local timeend=$(date +%s)
+	# echo "Done."
 
-	# check sanity
-	moh-check-sane
+	# Don't do these in $code because the user may press Ctrl-C
+	[[ $testname = gputest ]] && {
+		[[ -r ~/_geeks3d_gputest_log.txt ]] && mv ~/_geeks3d_gputest_log.txt $logs/$testid-gputest.log
+		[[ -r ~/_geeks3d_gputest_scores.csv ]] && mv ~/_geeks3d_gputest_scores.csv $logs/$testid-gputest.csv
+	}
 
-	# We need to pass a command to IPG's PowerLog.
-	# Make it a file (had too much hassle passing it as string to PowerLog)
-	echo "echo Waiting 15 seconds to capture idle temperature ...
-sleep 15
-$bin/HandBrakeCLI -i $home/$mov -o $mkv -f mkv -4 -w 1280 -l 694 -e x264 -q 20 --vfr  -a 1 -E ffaac -B 128 -6 stereo -R Auto -D 0 --gain=0 --audio-copy-mask none --audio-fallback ffaac -x rc-lookahead=50:ref=8:bframes=16:me=umh:subq=9:merange=24 --verbose=1 2>$hblog
-echo Cooling off for 15 seconds ...
-sleep 15" > $tmp/cmd-x264.sh
-
-	# run the x264 encoding
-	echo "Now executing the x264 transcode. This will take a while. Expect fans to go berserk in 30-60 sec ..."
-	/Applications/Intel\ Power\ Gadget/PowerLog -resolution 300 -file $ipglog -cmd bash $tmp/cmd-x264.sh
-	echo "Done."
+	# Populate the global $duration, $mins, $secs
+	duration=$((timeend-timestart-waitstart-waitend))
+	hduration=`humantime $duration`
 	
-	# plot result
+	# Plot result
 	moh-plot
+}
+
+## Start any user specified command and log it (it must terminate)
+## TODO: add timer
+moh-cmd ()
+{
+	moh-check-usercmd
+	echo "$usercmd" | wrapper custom
+}
+
+# Run GpuTest
+moh-gputest ()
+{
+	moh-check-gputest
+	# wrapper gputest $((timeout+30)) <<-SH
+	wrapper gputest <<-SH
+		$bin/GpuTest.app/Contents/MacOS/GpuTest '/test=$gputest /width=$gpuwidth /height=$gpuheight /msaa=$gpumsaa /benchmark /benchmark_duration_ms=${timeout}000 /no_scorebox' &>/dev/null
+	SH
+
+}
+
+# Run Prime95 ... currently buggy, torture test does not always start with -t
+moh-prime95 ()
+{
+	moh-check-prime95
+
+	local workdir=~/Prime95
+	[[ -d $workdir ]] && rm -rf $workdir
+	mkdir -p $workdir
+
+	cat <<-STR
+
+                              ---------------
+                               W A R N I N G
+                              ---------------
+
+		There is a bug in Prime95, and the torture test may not start automatically when the GUI opens. If you don't see worker threads in the Prime95 GUI once it starts then start the torture test manually as follows:
+
+		Options -> Torture Test -> Custom -> MinFFT=$p95minfft, MaxFFT=$p95maxfft, Memory=$p95mem, Time=$p95timefft -> Run.
+
+		Press any key to start Prime95 ...
+	
+	STR
+	read -s -n 1
+
+	# 8k in-place FFTs (in-place when TortureMem <= 8) ... most stressful
+	# For blend: Min=8, Max=1792, Mem=2048, Time=5
+	# For small with some mem: Min=8, Max=16, Mem=512, Time=5
+	cat > $workdir/prime.txt <<-TXT
+		MinTortureFFT=$p95minfft
+		MaxTortureFFT=$p95maxfft
+		TortureMem=$p95mem
+		TortureTime=$p95timefft
+		V24OptionsConverted=1
+		StressTester=1
+		UsePrimenet=0
+		Nice=$p95nice
+		ManualComm=1
+	TXT
+	# SumInputsErrorCheck=0
+	# ErrorCheck=0
+	# StaggerStarts=1
+	# WGUID_version=2
+	# MergeWindows=12
+	# NoMoreWork=0
+
+	wrapper prime95 $timeout <<-SH
+		$bin/Prime95.app/Contents/MacOS/Prime95 -t -W$workdir
+	SH
+}
+
+## Start the normal x264 test
+moh-x264 () {
+	moh-check-x264
+	wrapper x264 <<-SH
+		$bin/HandBrakeCLI -i $home/$mov -o $mkv -f mkv -4 -w 1280 -l 720 -e x264 -q 26 --vfr  -a 1 -E ffaac -B 128 -6 stereo -R Auto -D 0 --gain=0 --audio-copy-mask none --audio-fallback ffaac -x rc-lookahead=50:ref=8:bframes=16:me=umh:subme=9:merange=24 --verbose=1 2>$hblog
+	SH
+}
+
+## Start the long x264 test
+moh-x264-long () {
+	moh-check-x264
+	wrapper x264-long <<-SH
+		# $bin/HandBrakeCLI -i $home/$mov -o $mkv -f mkv -4 -w 1280 -l 720 -e x264 -q 20 --vfr  -a 1 -E ffaac -B 128 -6 stereo -R Auto -D 0 --gain=0 --audio-copy-mask none --audio-fallback ffaac -x rc-lookahead=50:ref=16:bframes=16:b-adapt=2:direct=auto:me=tesa:subme=11:merange=48:analyse=all:trellis=2 --verbose=1 2>$hblog
+		# $bin/HandBrakeCLI -i $home/$mov -o $mkv -f mkv -4 -w 1280 -l 720 -e x264 -q 20 --vfr  -a 1 -E ffaac -B 128 -6 stereo -R Auto -D 0 --gain=0 --audio-copy-mask none --audio-fallback ffaac --x264-preset=veryslow --verbose=1 2>$hblog
+		$bin/HandBrakeCLI -i $home/$mov -o $mkv -f mkv -4 -w 1280 -l 720 -e x264 -q 26 --vfr  -a 1 -E ffaac -B 128 -6 stereo -R Auto -D 0 --gain=0 --audio-copy-mask none --audio-fallback ffaac -x rc-lookahead=200:ref=16:bframes=16:b-adapt=2:direct=auto:me=esa:subme=9:merange=24 --verbose=1 2>$hblog
+	SH
+}
+
+moh-gpudetect () {
+	moh-check-gfx
+	local i j log pid
+	$bin/gfxCardStatus.app/Contents/MacOS/gfxCardStatus &> $tmp/gfx.log &
+	pid=$!
+	echo Detecting GPUs ...
+	for ((i=0;i<10;i++)); do
+		sleep 1
+		log=$(<$tmp/gfx.log)
+		if [[ "$log" =~ GPUs\ present:\ \([^\)]+$'\n'\) ]]; then
+			log=${log/*GPUs present: (/}
+			log=${log/)*/}
+			log=${log//[\",]/}
+			local IFS=$'\n'
+			log=($log)
+			local IFS=$'\n\t '
+			if [[ ${#log[*]} -lt 2 ]]; then
+				echo "Only one GPU detected. Nothing to switch. Exiting ..." >&2
+				silentkill $pid
+				return 15
+			else
+				# for ((j=0;j<${#log[*]};j++)); do echo $((j+1)). ${log[j]}; done
+				silentkill $pid
+				return 0
+			fi
+		fi
+	done
+	silentkill $pid
+	echo Timeout waiting for gfxCardStatus. Exiting ... >&2
+	return 16
+}
+
+# moh-gpuswitch MODE, where MODE={1,2,3} for integrated, discrete, dynamic
+moh-gpuswitch () {
+	moh-check-gfx
+	moh-gpudetect || return $?
+	local i j log pid arg name line logfile=$logs/gfx.log
+	[[ $1 = 1 ]] && arg=--integrated && name=Integrated
+	[[ $1 = 2 ]] && arg=--discrete && name=Discrete
+	[[ $1 = 3 ]] && arg=--dynamic && name=Dynamic
+	[[ -z $arg ]] && echo "Error: Invalid parameter '$1'. GPU not switched. Exiting ..." >&2 && exit 19
+	echo Switching GPU to $name ...
+	# Need to attempt 2-3 times due to a bug
+	# https://github.com/codykrieger/gfxCardStatus/issues/103
+	for ((i=0;i<3;i++)); do
+		echo Pass $((i+1))/3 ...
+		# It also doesn't exit, so we need to background it, monitor its log file, then kill it ... 
+		> $logfile
+		$bin/gfxCardStatus.app/Contents/MacOS/gfxCardStatus $arg &> $logfile &
+		pid=$!
+		while [[ 1 ]]; do
+			# echo $i
+			sleep 0.5
+			line[0]=`tail -n 1 $logfile`
+			sleep 0.5
+			line[1]=`tail -n 1 $logfile`
+			sleep 0.5
+			line[2]=`tail -n 1 $logfile`
+			[[ -n ${line[0]} && -n ${line[1]} && -n ${line[2]} \
+				&& "${line[0]}" = "${line[1]}" && "${line[1]}" = "${line[2]}" ]] && break
+		done
+		# [[ $j = 20 ]] && Timeout waiting for gfxCardStatus. GPU possibly not switched. Exiting ... >&2 && return 18
+		# echo killing pid=$pid $i
+		silentkill $pid
+	done
+	echo
+	echo -n Done. GPU should now be switched to $name.
+	[[ -z $action ]] && anykey || echo
+}
+
+moh-gpuswitch-menu () {
+	moh-check-gfx
+	moh-gpudetect || return $?
+	echo "
+  1. Integrated
+  2. Discrete
+  3. Dynamic
+
+  Q. Quit
+"
+	read -p "Choose GPU type: [q] " ans
+	echo
+	[[ $ans =~ ^[qQ]?$ ]] && return 0
+	[[ ! $ans = [012] ]] && echo "Error: Invalid option '$ans'. Try again." && moh-gpuswitch-menu
+	moh-gpuswitch $ans
+}
+
+## Parse HandBrake log and populate the global $duration, $mins, $secs, $perf
+perf-handbrake () {
+	[[ -r $hblog ]] || return 0
+	local frames=(`grep -Eo 'got [0-9]+ frames' $hblog`)
+	frames=${frames[1]}
+	local avgfps=(`grep -Eo 'average encoding speed for job is [0-9.]+ fps' $hblog`)
+	avgfps=${avgfps[6]}
+	duration=`echo "$frames/$avgfps" | bc -l`
+	duration=${duration/.*/}
+	hduration=`humantime $duration`
+	perf=`printf "%.2f fps" $avgfps`
+}
+
+## Parse GpuTest log and populate the global $duration, $mins, $secs, $perf
+perf-gputest () {
+	local logfile=$logs/$testid-gputest.csv
+	[[ -r $logfile ]] || return 0
+	local IFS=$'\n\t,'
+	local csv=($(<$logfile))
+	local IFS=$'\n\t '
+	local n=${#csv[*]}
+	local frames=${csv[n-1]}
+	duration=$((csv[n-3]/1000))
+	hduration=`humantime $duration`
+	local gpu=${csv[n-10]}
+	gpu=${gpu/ OpenGL Engine/}
+	gpu=${gpu/NVIDIA/Nvidia}
+	gpu=${gpu/GeForce /}
+	local fps=`echo "$frames/$duration" | bc -l`
+
+	perf=`printf "%.2f fps, ${gpuwidth}x$gpuheight, ${gpumsaa}xAA, $gpu" $fps`
 }
 
 moh-plot () {
 	# Prepare to plot graph from the csv output of IPG
-	cat - >$tmp/ipg.gle <<'GLE'
-papersize 20 10
-size 20 10
-!margins 2 2 2 2
-set font texcmr
-begin graph
-   title arg$(2)
-   xtitle "Time (sec)"
-   ytitle "Temperature (C)" color red
-   y2title "Frequency (MHz)" color blue
-   data arg$(1) ignore 1 d1=c1,c9 d2=c1,c2
-   axis grid
-   subticks on
-   ticks color grey10
-   subticks lstyle 2
-   yaxis min 20 max 110 dticks 10 dsubticks 2.5
-   y2axis min 400 max 4000 dticks 200 dsubticks 100
-   !y2axis min 600 max 3300 nticks 9
-   !xnames from d1
-   key pos bl offset 1.25 0.25
-   d1 line color red key arg$(3)
-   d2 x2axis y2axis line color blue key arg$(4)
-end graph
-GLE
+	cat >$tmp/ipg.gle <<-'GLE'
+	papersize 20 10
+	size 20 10
+	!margins 2 2 2 2
+	set font texcmr
+	set titlescale 0.9
+	begin graph
+	   title arg$(2) dist 0.2
+	   xtitle "Time (sec)"
+	   ytitle "CPU Temperature (C)" color red
+	   y2title "CPU Frequency (MHz)" color blue
+	   data arg$(1) ignore 1 d1=c1,c9 d2=c1,c2
+	   axis grid
+	   subticks on
+	   ticks color grey10
+	   subticks lstyle 2
+	   yaxis min 20 max 110 dticks 10 dsubticks 2.5
+	   y2axis min 400 max 4000 dticks 200 dsubticks 100
+	   !y2axis min 600 max 3300 nticks 9
+	   !xnames from d1
+	   key pos bl offset 1.25 0.25
+	   d1 line color red key arg$(3)
+	   d2 x2axis y2axis line color blue key arg$(4)
+	end graph
+	GLE
+
+	# graph files
+	local graph=$home/$testid-$testname.png
+	local graphgif=$home/$testid-$testname.gif
 
 	# Remove the trailing lines (Intel decided to add non-csv at athe end) 
 	# and the first two columns (there's a bug in GLE: it can't properly read
 	# the xnames from a column different than 1st column; 
 	# "xnames from d1" reads the y values, instead of x values)
-	lines=(`wc -l $ipglog`)
-	head -n $((lines[0]-11)) $logs/$testid-ipg.csv | sed 's/^[^,]*,[^,]*,//' > $tmp/ipg.csv
+	local lines=(`wc -l "$ipglog"`)
+	head -n $((${lines[0]}-11)) $ipglog | sed 's/^[^,]*,[^,]*,//' > $tmp/ipg.csv
 
 	# Get max temp, max freq, duration and avg fps
-	maxtemp=`cut -f9 -d, $tmp/ipg.csv | sed 's/[[:space:]]//g' | sort -n | tail -1`
-	maxfreq=`cut -f2 -d, $tmp/ipg.csv | sed 's/[[:space:]]//g' | sort -n | tail -1`
-	avgfps=(`grep -Eo 'average encoding speed for job is [0-9.]+ fps' $hblog`)
-	avgfps=${avgfps[6]}
-	frames=(`grep -Eo 'got [0-9]+ frames' $hblog`)
-	frames=${frames[1]}
-	totsecs=`echo "$frames/$avgfps" | bc -l`
-	totsecs=${totsecs/.*/}
-	mins=$((totsecs/60))
-	secs=$((totsecs-mins*60))
+	local maxtemp=`cut -f9 -d, $tmp/ipg.csv | sed 's/[[:space:]]//g' | sort -n | tail -1`
+	local maxfreq=`cut -f2 -d, $tmp/ipg.csv | sed 's/[[:space:]]//g' | sort -n | tail -1`
 
-	# CPU model as graph title
-	cpu=`sysctl -n machdep.cpu.brand_string`
+	# Prepend to title
+	local testtitle=$testname
+
+	# Get performance details, if any
+	[[ $testname =~ x264 ]] && perf-handbrake
+	[[ $testname =~ gputest ]] && testtitle="$testtitle ($gputest)" && perf-gputest
+
+	# CPU model
+	local cpu=`sysctl -n machdep.cpu.brand_string`
 	cpu=${cpu/ CPU/}
 	cpu=${cpu/(TM)/}
 	cpu=${cpu/(R)/}
+	cpu=${cpu/Intel /}
+	cpu=${cpu/AMD /}
 
-	# Plot temp and freq graph
-	~/Applications/QGLE.app/Contents/bin/gle -cairo -resolution 150 -d png -verbosity 0 \
+	# Graph title
+	local graphtitle="$testtitle - $cpu - $hduration"
+	[[ -n $perf ]] && graphtitle="$graphtitle, $perf"
+
+	# Plot graph, -resolution sets the DPI, note that the PNG driver is 
+	# a rasterized and resampled version of the internal Postscript output, and
+	# as such, the values sometimes may appear slightly off due to resampling
+	$bin/QGLE.app/Contents/bin/gle -cairo -resolution 200 -d png -verbosity 0 \
 		-output $graph \
 		$tmp/ipg.gle \
 		$tmp/ipg.csv \
-		"$cpu   -   ${mins}m ${secs}s (${totsecs}s)   -   $avgfps avg fps" \
-		"Temp (max reached: $maxtemp C)" "Freq" >/dev/null
+		"$graphtitle" \
+		"Temperature (max reached: $maxtemp C)" \
+		"Frequency" \
+	>/dev/null
 	
-	# convert to gif if sips exists (smaller)
-	which sips >/dev/null && sips -s format gif $graph --out $graphgif && rm $graph && graph=$graphgif
+	# Crop and make smaller, use sips if ImageMagick is not available
+	set-imagick
+	if which convert &>/dev/null; then
+		mogrify -crop 1340x730+125+35 -quality 96 -colors 64 -write $graph-1 $graph \
+			&& mv $graph-1 $graph
+	elif which sips &>/dev/null; then
+		sips -s format gif $graph --out $graphgif &>/dev/null
+		graph=$graphgif
+		rm $graph
+	fi
 
-	echo "
-Max temp reached: $maxtemp C
-Encode speed:     $avgfps fps (average)
-Encode duration:  $totsecs secs (${mins}m ${secs}s)
+    echo
+    [[ -n $perf ]] && echo "Benchmark:        $perf"
+    cat <<-STR
+		Max temp reached: $maxtemp C
+		Test duration:    $duration secs ($hduration)
 
-See $graph for the full graph.
-	"
+		See $graph for the full graph.
+
+	STR
 
 	# read -p "
 	# Do you want to view it with the associated graphics viewer? [y] " ans
@@ -212,37 +753,96 @@ See $graph for the full graph.
 		open $graph
 }
 
-# specified what to do?
+#----------------------------- Done Functions -----------------------------#
+
+
+# GPU switch requested in the command line?
+case $gpuswitch in
+	integrated) moh-gpuswitch 1;;
+	discrete)   moh-gpuswitch 2;;
+	dynamic)    moh-gpuswitch 3;;
+	[012])      moh-gpuswitch $gpuswitch;;
+	*) [[ -n $gpuswitch ]] && \
+		echo "Error: Unknown gpuswitch value '$gpuswitch'. Exiting ..." >&2 && exit $ERR_CMDLINE
+esac
+
+# Command line contained action?
 if [[ -n $action ]]; then
 	$action
 	exit $?
 fi 
 
-# if not, show menu
+# If not, show menu
 while [[ 1 ]]; do
-	echo -n "
------------------------------------------------------------------------
-Automated x264 benchmark. Best to quit all other apps before launching.
------------------------------------------------------------------------
-  1. Fetch Handbrake (6.9 MB)
-  2. Fetch Intel Power Gadget (2.3 MB)
-  3. Fetch QGLE (13.2 MB)
-  4. Fetch Big Buck Bunny movie (692 MB)
-
-  0. Launch x264 transcoding (does the above as needed)
-
-  q. Quit
------------------------------------------------------------------------
-Your choice: [q] "
+	echo -n \
+"------------------------------------------------------------------------
+         MacOH 1.1.2-beta. Quit all other apps before launching.
+------------------------------------------------------------------ Tests
+ G. GpuTest (use gfxCardStatus to force the integrated GPU)
+ P. Prime95 (in-place small FFTs, very stressful)
+ X. x264 transcode
+ Y. Longer x264 transcode (~4x longer)
+--------------------------------------------------------------- Settings
+ T. Change duration of GpuTest or Prime95 [$(humantime $timeout)]
+ W. Change GpuTest type [$gputest]
+ R. Change GpuTest resolution [${gpuwidth}x$gpuheight]
+ M. Change GpuTest MSAA [$gpumsaa]
+ S. Switch GPU to either Integrated or Discrete
+--------------------------------------------------------------- Optional
+ 1. Fetch Intel Power Gadget (2.3 MB)
+ 2. Fetch Graphics Layout Engine (13.2 MB)
+ 3. Fetch Prime95 (3.3 MB)
+ 4. Fetch GpuTest (1.8 MB)
+ 5. Fetch HandBrakeCLI (6.9 MB)
+ 6. Fetch the movie Big Buck Bunny (692 MB)
+ 7. Fetch gfxCardStatus, can switch GPU for 3D (0.9 MB)
+------------------------------------------------------------------------
+Your choice: [Q=Quit] "
 	read ans
 	echo
 	[[ -z $ans || $ans = q || $ans = Q ]] && exit 0
-	[[ $ans = 1 ]] && moh-get-handbrake && continue
-	[[ $ans = 2 ]] && moh-get-ipg && continue
-	[[ $ans = 3 ]] && moh-get-gle && continue
-	[[ $ans = 4 ]] && moh-get-video && continue
-	[[ $ans = 0 ]] && moh-start && exit
-	[[ $ans = x ]] && moh-plot && exit
-	#[[ $ans = a || $ans = A ]] && moh-get-handbrake && moh-get-ipg \
-	#	&& moh-get-gle && moh-get-movie && moh-start && exit
+
+	set -e
+
+	[[ $ans = 1 ]] && { moh-get-ipg; continue; }
+	[[ $ans = 2 ]] && { moh-get-gle; continue; }
+	[[ $ans = 3 ]] && { moh-get-prime95; continue; }
+	[[ $ans = 4 ]] && { moh-get-gputest; continue; }
+	[[ $ans = 5 ]] && { moh-get-handbrake; continue; }
+	[[ $ans = 6 ]] && { moh-get-video; continue; }
+	[[ $ans = 7 ]] && { moh-get-gfx; continue; }
+
+	[[ $ans =~ ^[gG]$ ]] && { moh-gputest; exit; }
+	[[ $ans =~ ^[pP]$ ]] && { moh-prime95; exit; }
+	[[ $ans =~ ^[yY]$ ]] && { moh-x264-long; exit; }
+	[[ $ans =~ ^[xX]$ ]] && { moh-x264; exit; }
+	[[ $ans =~ ^[sS]$ ]] && { moh-gpuswitch-menu; continue; }
+
+	[[ $ans =~ ^[wW]$ ]] && { 
+		read -p "Available types are: tess_x32, fur, gi, pixmark_volplosion, pixmark_piano, plot3d, triangle. New GpuTest type: [$gputest] " w;
+		[[ ", $gputesttypes, " = *", $w, "* ]] && editconf gputest $w && continue
+		menuerr="GpuTest type must be one of: $gputesttypes"
+	}
+
+	[[ $ans =~ ^[tT]$ ]] && { 
+		read -p "New duration in seconds: [$timeout] " t;
+		[[ $t -gt 0 ]] && editconf timeout $t && continue
+		menuerr="Duration must be a number greater than 0"
+	}
+
+	[[ $ans =~ ^[rR]$ ]] && { 
+		read -p "New resolution: [${gpuwidth}x$gpuheight] " r
+		[[ $r =~ ^[0-9]+x[0-9]+$ ]] && editconf gpuwidth ${r/*x/} \
+			&& editconf gpuheight ${r/x*/} && continue
+		menuerr="Resolution must be MxN, where M and N are positive integers"
+	}
+
+	[[ $ans =~ ^[mM]$ ]] && { 
+		read -p "New MSAA (0, 2, 4 or 8): [$gpumsaa] " m
+		[[ $m =~ ^[0248]$ ]] && editconf gpumsaa $m && continue
+		menuerr="MSAA value must be 0, 2, 4 or 8"
+	}
+
+	[[ -z $menuerr ]] && menuerr="Unknown option '$ans'"
+	anykey "Error: $menuerr. Press any key to continue ..."
 done 
