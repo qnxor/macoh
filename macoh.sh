@@ -426,7 +426,7 @@ moh-do-prime95 ()
 moh-do-x264 () {
 	do=x264
 	moh-check-x264
-	wrapper x264 <<-SH
+	moh-wrapper x264 <<-SH
 		$bin/HandBrakeCLI -i $home/$mov -o $mkv -f mkv -4 -w 1280 -l 720 -e x264 -q 26 --vfr  -a 1 -E ffaac -B 128 -6 stereo -R Auto -D 0 --gain=0 --audio-copy-mask none --audio-fallback ffaac -x rc-lookahead=50:ref=8:bframes=16:me=umh:subme=9:merange=24 --verbose=1 2>$hblog
 	SH
 }
