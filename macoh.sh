@@ -22,7 +22,9 @@ p95minfft=8
 p95maxfft=8
 p95mem=8
 p95timefft=5
-p95nice=10
+p95nice=0
+hbnice=-10
+gpunice=-10
 menuquit=0
 mov=big_buck_bunny_1080p_h264.mov
 # mkv=$home/big_buck_bunny_1080p_h264_transcoded.mkv
@@ -72,10 +74,14 @@ humantime () {
 }
 editconf () {
 	local val
-	[[ $2 =~ ^[0-9]+$ ]] && val=$2 || val="'$2'"
+	[[ $2 =~ ^-?[0-9]+$ ]] && val=$2 || val="'$2'"
 	eval "$1=$val"
-	cp -f "$conf" "$conf~"
-	sed -E "s:^$1=.*:$1=${val//:/\\:}:" "$conf~" > "$conf"
+	if [[ -r "$conf" ]] && grep -qE "^$1=" "$conf"; then
+		cp -f "$conf" "$conf~"
+		sed -E "s:^$1=.*:$1=${val//:/\\:}:" "$conf~" > "$conf"
+	else
+		echo "$1=$val" >> "$conf"
+	fi
 }
 silentkill () {
 	# Die with dignity. Kill if stubborn.
@@ -364,8 +370,10 @@ moh-do-gputest ()
 {
 	do=gputest
 	moh-check-gputest
+	local sudo
+	[[ $gpunice -lt 0 ]] && sudo=sudo
 	moh-wrapper GpuTest <<-SH
-		$bin/GpuTest.app/Contents/MacOS/GpuTest '/test=$gputest /width=$gpuwidth /height=$gpuheight /msaa=$gpumsaa /benchmark /benchmark_duration_ms=${timeout}000 /no_scorebox' &>/dev/null
+		$sudo nice -n $gpunice $bin/GpuTest.app/Contents/MacOS/GpuTest '/test=$gputest /width=$gpuwidth /height=$gpuheight /msaa=$gpumsaa /benchmark /benchmark_duration_ms=${timeout}000 /no_scorebox' &>/dev/null
 	SH
 
 }
@@ -586,6 +594,8 @@ moh-wrapper ()
 	local handbrake 			# Code to deal with HandBrake (cpu priority)
 	local watchdog 				# Code to deal with max duration (timeout)
 
+	echo "$code"
+
 	# Does the code run HandBrakeCLI? It changes its nice level to 19 after it
 	# starts so we can't start it with nice -n 0 HandBrakeCLI. Prepend a
 	# background loop to poll for it and renice it once detected
@@ -593,7 +603,7 @@ moh-wrapper ()
 	echo "CPU priority of HandBrake will be raised (sudo)."
 	for ((i=0;i<120;i++)); do
 		sleep 1
-		pid=`pgrep HandBrakeCLI` && { sleep 2; sudo renice -10 -p $pid; break; }
+		pid=`pgrep HandBrakeCLI` && { sleep 2; sudo renice '$hbnice' -p $pid; break; }
 	done &'
 
 	# Timeout needed?
@@ -613,8 +623,11 @@ moh-wrapper ()
 	# Is the code using sudo? If so, ask for the password now to avoid the
 	# password prompt being ocluded later by the wrapping scripts which may
 	# redirect stdout/stderr.
-	[[ -n $handbrake || $code =~ sudo[[:space:]] ]] \
-		&& sudo='echo Sudo detected. It may ask you to enter your Mac password. && sudo echo'
+	if [[ $code =~ sudo\ (re)?nice ]]; then
+		sudo='echo Running with high CPU priority will require your password. && sudo echo'
+	elif [[ $code =~ sudo[[:space:]] ]]; then
+		sudo='echo Sudo detected. It may ask you to enter your Mac password. && sudo echo'
+	fi
 
 	# Build script file to pass to Intel Power Gadget
 	cat > $cmdfile <<-SH
@@ -846,7 +859,7 @@ esac
 while [[ 1 ]]; do
 	echo -n "
 ------------------------------------------------------------------------
-         MacOH 1.2.0-beta. Quit all other apps before launching.
+         MacOH 1.2.1-beta. Quit all other apps before launching.
 ------------------------------------------------------------------ Tests
  G. GpuTest (use gfxCardStatus to force the integrated GPU)
  P. Prime95 (in-place small FFTs, very stressful)
@@ -854,6 +867,8 @@ while [[ 1 ]]; do
  Y. Longer x264 transcode (~4x longer)
 --------------------------------------------------------------- Settings
  T. Change duration of GpuTest or Prime95 [$(humantime $timeout)]
+ H. Change CPU priority of HandBrake [$hbnice]
+ U. Change CPU priority of GpuTest [$gpunice]
  W. Change GpuTest type [$gputest]
  R. Change GpuTest resolution [${gpuwidth}x$gpuheight]
  M. Change GpuTest MSAA [$gpumsaa]
@@ -894,22 +909,45 @@ Your choice: [Q=Quit] "
 		continue
 	}
 
-	[[ $ans =~ ^[tT]$ ]] && { 
-		read -p "New duration in seconds: [$timeout] " t;
-		[[ $t -gt 0 ]] && editconf timeout $t && continue
+	[[ $ans =~ ^[tT]$ ]] && {
+		read -p "New duration in seconds: [$timeout] " x;
+		[[ $x -gt 0 ]] && editconf timeout $x && continue
+		[[ -z $x ]] && continue
 		menuerr="Duration must be a number greater than 0"
 	}
 
+	[[ $ans =~ ^[hH]$ ]] && {
+		read -p "New HandBrake priority in -19...20 (smaller values means higher priority): [$hbnice] " x;
+		[[ -z $x ]] && continue
+		[[ $x =~ ^-?[0-9]+$ && $x -ge -19 && $x -le 20 ]] && editconf hbnice $x && {
+			[[ $x -lt 0 ]] && anykey "Negative value entered, your password will be required. Press any key to continue ..."
+			continue
+		}
+		menuerr="Priority (nice level) must be an integer in -19,...,20"
+	}
+
+	[[ $ans =~ ^[uU]$ ]] && {
+		read -p "New GpuTest priority in -19...20 (smaller values means higher priority): [$gpunice] " x;
+		[[ -z $x ]] && continue
+		[[ $x =~ ^-?[0-9]+$ && $x -ge -19 && $x -le 20 ]] && editconf gpunice $x && {
+			[[ $x -lt 0 ]] && anykey "Negative value entered, your password will be required. Press any key to continue ..."
+			continue
+		}
+		menuerr="Priority (nice level) must be an integer in -19,...,20"
+	}
+
 	[[ $ans =~ ^[rR]$ ]] && { 
-		read -p "New resolution: [${gpuwidth}x$gpuheight] " r
-		[[ $r =~ ^[0-9]+x[0-9]+$ ]] && editconf gpuwidth ${r/*x/} \
-			&& editconf gpuheight ${r/x*/} && continue
+		read -p "New resolution: [${gpuwidth}x$gpuheight] " x
+		[[ -z $x ]] && continue
+		[[ $x =~ ^[0-9]+x[0-9]+$ ]] && editconf gpuwidth ${x/x*/} \
+			&& editconf gpuheight ${x/*x/} && continue
 		menuerr="Resolution must be MxN, where M and N are positive integers"
 	}
 
 	[[ $ans =~ ^[mM]$ ]] && { 
-		read -p "New MSAA (0, 2, 4 or 8): [$gpumsaa] " m
-		[[ $m =~ ^[0248]$ ]] && editconf gpumsaa $m && continue
+		read -p "New MSAA (0, 2, 4 or 8): [$gpumsaa] " x
+		[[ -z $x ]] && continue
+		[[ $x =~ ^[0248]$ ]] && editconf gpumsaa $x && continue
 		menuerr="MSAA value must be 0, 2, 4 or 8"
 	}
 

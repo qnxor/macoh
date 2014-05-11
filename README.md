@@ -92,6 +92,7 @@ Todo
 Changelog
 ---------
 
+- 1.2.1-beta, 2014-05-11 - CPU priority of HandBrake and GpuTest can now be changed (menu, conf); more bug fixes.
 - 1.2.0-beta, 2014-05-09 - GpuTest stats on graphs, cleaner code, lots of bug fixes
 - 1.1.2-beta, 2014-05-08 - Added GPU switching to command line.
 - 1.1.1-beta, 2014-05-07 - Bug fixing release. 
