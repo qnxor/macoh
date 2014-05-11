@@ -151,6 +151,21 @@ menu () {
 		fi
 	done
 }
+benice () {
+	local pid
+	echo "Changing $1's niceness to $2 ..."
+	for ((i=0;i<120;i++)); do
+		sleep 1
+		pid=`pgrep $1` && { 
+			sleep 2
+			sudo renice $2 -p $pid
+			break
+		}
+	done
+}
+getfuncdef () {
+	declare -f $1
+}
 
 #------------------------------ GET functions ------------------------------#
 
@@ -373,9 +388,10 @@ moh-do-gputest ()
 	local sudo
 	[[ $gpunice -lt 0 ]] && sudo=sudo
 	moh-wrapper GpuTest <<-SH
-		$sudo nice -n $gpunice $bin/GpuTest.app/Contents/MacOS/GpuTest '/test=$gputest /width=$gpuwidth /height=$gpuheight /msaa=$gpumsaa /benchmark /benchmark_duration_ms=${timeout}000 /no_scorebox' &>/dev/null
+		$(getfuncdef benice)
+		benice GpuTest $gpunice &
+		$bin/GpuTest.app/Contents/MacOS/GpuTest '/test=$gputest /width=$gpuwidth /height=$gpuheight /msaa=$gpumsaa /benchmark /benchmark_duration_ms=${timeout}000 /no_scorebox' &>/dev/null
 	SH
-
 }
 
 # Run Prime95 ... currently buggy, torture test does not always start with -t
@@ -434,7 +450,14 @@ moh-do-prime95 ()
 moh-do-x264 () {
 	do=x264
 	moh-check-x264
+	# HandBrake changes its nice level to 19 after it starts so we can't start
+	# it with nice -n 0 HandBrakeCLI. Prepend a background process to poll for
+	# it and renice it once detected
+	# NOTE: starting with nice is not a good idea since negative values require
+	#       sudo which then causes HB to place the log files in /root ...
 	moh-wrapper x264 <<-SH
+		$(getfuncdef benice)
+		benice HandBrakeCLI $hbnice &
 		$bin/HandBrakeCLI -i $home/$mov -o $mkv -f mkv -4 -w 1280 -l 720 -e x264 -q 26 --vfr  -a 1 -E ffaac -B 128 -6 stereo -R Auto -D 0 --gain=0 --audio-copy-mask none --audio-fallback ffaac -x rc-lookahead=50:ref=8:bframes=16:me=umh:subme=9:merange=24 --verbose=1 2>$hblog
 	SH
 }
@@ -444,6 +467,8 @@ moh-do-x264-long () {
 	do=x264-long
 	moh-check-x264
 	moh-wrapper x264-Long <<-SH
+		$(getfuncdef benice)
+		benice HandBrakeCLI $hbnice &
 		# $bin/HandBrakeCLI -i $home/$mov -o $mkv -f mkv -4 -w 1280 -l 720 -e x264 -q 20 --vfr  -a 1 -E ffaac -B 128 -6 stereo -R Auto -D 0 --gain=0 --audio-copy-mask none --audio-fallback ffaac -x rc-lookahead=50:ref=16:bframes=16:b-adapt=2:direct=auto:me=tesa:subme=11:merange=48:analyse=all:trellis=2 --verbose=1 2>$hblog
 		# $bin/HandBrakeCLI -i $home/$mov -o $mkv -f mkv -4 -w 1280 -l 720 -e x264 -q 20 --vfr  -a 1 -E ffaac -B 128 -6 stereo -R Auto -D 0 --gain=0 --audio-copy-mask none --audio-fallback ffaac --x264-preset=veryslow --verbose=1 2>$hblog
 		$bin/HandBrakeCLI -i $home/$mov -o $mkv -f mkv -4 -w 1280 -l 720 -e x264 -q 26 --vfr  -a 1 -E ffaac -B 128 -6 stereo -R Auto -D 0 --gain=0 --audio-copy-mask none --audio-fallback ffaac -x rc-lookahead=200:ref=16:bframes=16:b-adapt=2:direct=auto:me=esa:subme=9:merange=24 --verbose=1 2>$hblog
@@ -542,8 +567,15 @@ moh-gpuswitch-menu () {
 	anykey
 }
 
+## Parse Prime95 log and populate the global $duration, $mins, $secs, $perf
+## For now it does nothing since Prime95 is killed forcefully as it lacks a
+## stop condition
+moh-perf-prime95 () {
+	perf=''
+}
+
 ## Parse HandBrake log and populate the global $duration, $mins, $secs, $perf
-perf-handbrake () {
+moh-perf-x264 () {
 	[[ -r $hblog ]] || return 0
 	local frames=(`grep -Eo 'got [0-9]+ frames' $hblog`)
 	frames=${frames[1]}
@@ -555,8 +587,12 @@ perf-handbrake () {
 	perf=`printf "%.2f fps" $fps`
 }
 
+moh-perf-x264-long () {
+	moh-perf-x264
+}
+
 ## Parse GpuTest log and populate the global $duration, $mins, $secs, $perf
-perf-gputest () {
+moh-perf-gputest () {
 	[[ -r $gpucsv ]] || return 0
 	local IFS=$'\n\t,'
 	local csv=($(<$gpucsv))
@@ -584,7 +620,6 @@ moh-wrapper ()
 
 	# set test name (displayed in the graph title)
 	local testname=$1
-	#local sanename=`echo $1 | tr '[:upper:]' '[:lower:]' | tr '[:space:]' '-' | tr -dC '[a-z0-9\-]'`
 
 	# Prepare script file to pass to Intel Power Gadget
 	local cmdfile=$tmp/cmd-$do.sh
@@ -594,18 +629,6 @@ moh-wrapper ()
 	local handbrake 			# Code to deal with HandBrake (cpu priority)
 	local watchdog 				# Code to deal with max duration (timeout)
 
-	echo "$code"
-
-	# Does the code run HandBrakeCLI? It changes its nice level to 19 after it
-	# starts so we can't start it with nice -n 0 HandBrakeCLI. Prepend a
-	# background loop to poll for it and renice it once detected
-	[[ $code =~ HandBrakeCLI ]] && handbrake='
-	echo "CPU priority of HandBrake will be raised (sudo)."
-	for ((i=0;i<120;i++)); do
-		sleep 1
-		pid=`pgrep HandBrakeCLI` && { sleep 2; sudo renice '$hbnice' -p $pid; break; }
-	done &'
-
 	# Timeout needed?
 	# Add a pair of brackets ( ) around bg processes to suppress "terminated"
 	# messages from the shell .. neat. Unforturnately, we can't suppress all of
@@ -614,7 +637,7 @@ moh-wrapper ()
 	# process can't prevent that. We could swap the fg and bg processes, but
 	# then the test would run in bg which is more hassle to handle (though we
 	# have bash's "wait" function)
-	[[ $2 -gt 0 ]] && watchdog=$(declare -f silentkill)'
+	[[ $2 -gt 0 ]] && watchdog=$(getfuncdef silentkill)'
 	echo "Waiting max '$(humantime $2)' to terminate."
 	( sleep '$2'; pids=`pgrep -P $$` && { sleep 3 && kill -KILL $pids &>/dev/null & } && kill -TERM $pids; ) &>/dev/null &
 	# { sleep '$2'; pids=`pgrep -P $$ 2>/dev/null` && silentkill $pids; } &
@@ -624,9 +647,9 @@ moh-wrapper ()
 	# password prompt being ocluded later by the wrapping scripts which may
 	# redirect stdout/stderr.
 	if [[ $code =~ sudo\ (re)?nice ]]; then
-		sudo='echo Running with high CPU priority will require your password. && sudo echo'
+		sudo='echo Changing CPU priority may require your password. && sudo echo'
 	elif [[ $code =~ sudo[[:space:]] ]]; then
-		sudo='echo Sudo detected. It may ask you to enter your Mac password. && sudo echo'
+		sudo='echo Sudo detected. It may require your password. && sudo echo'
 	fi
 
 	# Build script file to pass to Intel Power Gadget
@@ -711,12 +734,12 @@ moh-plot () {
 	local maxtemp=`cut -f9 -d, $tmp/ipg.csv | sed 's/[[:space:]]//g' | sort -n | tail -1`
 	local maxfreq=`cut -f2 -d, $tmp/ipg.csv | sed 's/[[:space:]]//g' | sort -n | tail -1`
 
+	# Parse log files and extract perf and duration strings
+	moh-perf-$do
+
 	# Prepend to title
 	local testtitle=$testname
-
-	# Get performance details, if any
-	[[ $do =~ x264 ]] && perf-handbrake
-	[[ $do =~ gputest ]] && testtitle="$testtitle ($gputest)" && perf-gputest
+	[[ $do = gputest ]] && testtitle="$testtitle ($gputest)"
 
 	# CPU model
 	local cpu=`sysctl -n machdep.cpu.brand_string`
@@ -857,31 +880,29 @@ esac
 
 # If not, show menu
 while [[ 1 ]]; do
+	s_hbnice=`printf '%-5s' "[$hbnice]"`
+	s_gpunice=`printf '%-5s' "[$gpunice]"`
+	s_timeout=`printf '%-10s' "[$(humantime $timeout)]"`
+	s_res=`printf '%-11s' "[${gpuwidth}x$gpuheight]"`
 	echo -n "
-------------------------------------------------------------------------
-         MacOH 1.2.1-beta. Quit all other apps before launching.
------------------------------------------------------------------- Tests
- G. GpuTest (use gfxCardStatus to force the integrated GPU)
- P. Prime95 (in-place small FFTs, very stressful)
- X. x264 transcode
+-----------------------------------------------------------------------------
+           MacOH 1.2.2-beta. Quit all other apps before launching.          
+----------------------------------------------------------------------- Tests
+ X. x264 transcode (~5 mins on mobile Haswell i7)
  Y. Longer x264 transcode (~4x longer)
---------------------------------------------------------------- Settings
- T. Change duration of GpuTest or Prime95 [$(humantime $timeout)]
- H. Change CPU priority of HandBrake [$hbnice]
- U. Change CPU priority of GpuTest [$gpunice]
- W. Change GpuTest type [$gputest]
- R. Change GpuTest resolution [${gpuwidth}x$gpuheight]
- M. Change GpuTest MSAA [$gpumsaa]
- S. Switch GPU to either Integrated or Discrete
---------------------------------------------------------------- Optional
- 1. Fetch Intel Power Gadget (2.3 MB)
- 2. Fetch Graphics Layout Engine (13.2 MB)
- 3. Fetch Prime95 (3.3 MB)
- 4. Fetch GpuTest (1.8 MB)
- 5. Fetch HandBrakeCLI (6.9 MB)
- 6. Fetch the movie Big Buck Bunny (692 MB)
- 7. Fetch gfxCardStatus, can switch GPU for 3D (0.9 MB)
-------------------------------------------------------------------------
+ P. Prime95 (in-place small FFTs, very stressful for the CPU)
+ G. 3D GpuTest (use gfxCardStatus to force the integrated GPU)
+ S. Switch GPU to integrated or discrete
+-------------------------------------------------------------------- Settings
+ T. GpuTest/Pr95 duration $s_timeout    W. GpuTest type [$gputest]
+ H. HandBrake priority $s_hbnice            U. GpuTest priority $s_gpunice
+ R. GpuTest resolution $s_res      M. GpuTest MSAA [$gpumsaa]
+-------------------------------------------------------------------- Download
+ 1. Intel Power Gadget (2.3 MB)         2. Prime95 (3.3 MB)
+ 3. HandBrakeCLI (6.9 MB)               4. GpuTest (1.8 MB)
+ 5. Graphics Layout Engine (13 MB)      6. Big Buck Bunny movie (691 MB)
+ 7. gfxCardStatus GPU switch (1 MB)
+-----------------------------------------------------------------------------
 Your choice: [Q=Quit] "
 	read ans
 	echo
@@ -890,10 +911,10 @@ Your choice: [Q=Quit] "
 	set -e
 
 	[[ $ans = 1 ]] && { moh-get-ipg; continue; }
-	[[ $ans = 2 ]] && { moh-get-gle; continue; }
-	[[ $ans = 3 ]] && { moh-get-prime95; continue; }
+	[[ $ans = 5 ]] && { moh-get-gle; continue; }
+	[[ $ans = 2 ]] && { moh-get-prime95; continue; }
 	[[ $ans = 4 ]] && { moh-get-gputest; continue; }
-	[[ $ans = 5 ]] && { moh-get-handbrake; continue; }
+	[[ $ans = 3 ]] && { moh-get-handbrake; continue; }
 	[[ $ans = 6 ]] && { moh-get-video; continue; }
 	[[ $ans = 7 ]] && { moh-get-gfx; continue; }
 
