@@ -68,12 +68,13 @@ Known issues
 
 Prime95 for Mac has [a bug](http://www.mersenneforum.org/showthread.php?p=372979#post372918), it doesn't start the torture test as instructed when it opens. For now, do it manually once the `macoh` opens the GUI. Some killer settings (expect throttling on laptops) are: `Options` > `Torture Test` > `Custom` > `MinFFT=8, MaxFFT=8, RunFFTsInPlace=Checked (or use Memory=8), TimeForEachFFT=5` > `Run`
 
-gfxCardStatus has a [a bug](https://github.com/codykrieger/gfxCardStatus/issues/103), it needs somes convincing to switch the GPU. The `macoh` script makes two attempts and normally gets it. Just in case it doesn't, you may need to insist or open the app normally (via Finder/Spotlight) and switch the GPU there.
+gfxCardStatus has [a bug](https://github.com/codykrieger/gfxCardStatus/issues/103), it needs somes convincing to switch the GPU. The `macoh` script makes two attempts and normally gets it. Just in case it doesn't, you may need to insist or open the app normally (via Finder/Spotlight) and switch the GPU there.
 
 Todo
 ----
 
-- [ ] Fan speed monitoring +graph (any free tool to read RPM from cmd line?) [#2](//github.com/qnxor/macoh/issues/2)
+- [ ] Fan speed monitoring +graph (any free tool?) [#2](//github.com/qnxor/macoh/issues/2)
+- [ ] GPU freq and temp monitoring +graph (any free tool?) [#6](//github.com/qnxor/macoh/issues/6)
 - [x] Add GPU testing
 - [x] Add Prime95
 - [ ] Avg and stddev between start+wait+5sec and end-wait-5sec [#3](//github.com/qnxor/macoh/issues/3)
