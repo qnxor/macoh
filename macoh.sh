@@ -584,7 +584,7 @@ moh-perf-x264 () {
 	duration=`echo "$frames/$fps" | bc -l`
 	duration=${duration/.*/}
 	hduration=`humantime $duration`
-	perf=`printf "%.2f fps" $fps`
+	perf="${fps:0:5} fps"
 }
 
 moh-perf-x264-long () {
@@ -606,7 +606,7 @@ moh-perf-gputest () {
 	gpu=${gpu/NVIDIA/Nvidia}
 	gpu=${gpu/GeForce /}
 	local fps=`echo "$frames/$duration" | bc -l`
-	perf=`printf "%.2f fps, ${gpuwidth}x$gpuheight, ${gpumsaa}xAA, $gpu" $fps`
+	perf="${fps:0:5}, ${gpuwidth}x$gpuheight, ${gpumsaa}xAA, $gpu"
 }
 
 ## Wrapper to start, monitor and log any job which is read from stdin
