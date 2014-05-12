@@ -886,12 +886,12 @@ while [[ 1 ]]; do
 	s_res=`printf '%-11s' "[${gpuwidth}x$gpuheight]"`
 	echo -n "
 -----------------------------------------------------------------------------
-           MacOH 1.2.2-beta. Quit all other apps before launching.          
+           MacOH 1.2.3-beta. Quit all other apps before launching.          
 ----------------------------------------------------------------------- Tests
- X. x264 transcode (~5 mins on mobile Haswell i7)
+ X. x264 transcode (5-6 mins on a Core i7-4850HQ)
  Y. Longer x264 transcode (~4x longer)
  P. Prime95 (in-place small FFTs, very stressful for the CPU)
- G. 3D GpuTest (use gfxCardStatus to force the integrated GPU)
+ G. 3D GpuTest (switch GPU to integrated/discrete beforehand)
  S. Switch GPU to integrated or discrete
 -------------------------------------------------------------------- Settings
  T. GpuTest/Pr95 duration $s_timeout    W. GpuTest type [$gputest]

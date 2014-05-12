@@ -1,20 +1,24 @@
 MacOH
 =====
 
-Small tool for Mac OS X that automatically downloads and installs tools and content to run CPU or GPU stress tests, monitoring CPU temperature and frequency which are plotted versus time. CPU throttling and/or overheating, if any, are easily spotted. See a [sample graph output](http://www.damtp.cam.ac.uk/research/afha/people/bogdan/macoh/graph.gif) (no throttling there).
+Small tool for Mac OS X that automatically downloads and installs tools and content and runs CPU or GPU stress tests, monitoring CPU temperature and frequency which are plotted versus time. The purpose is to evaluate CPU throttling and/or overheating (not performance).
 
-For now, it automatically does the following as needed:
+Output examples: [x264](http://www.damtp.cam.ac.uk/research/afha/people/bogdan/macoh/x264.png) (no throttling), [Prime95](http://www.damtp.cam.ac.uk/research/afha/people/bogdan/macoh/prime95.png) (heavy throttling), [3D-Intel 5100](http://www.damtp.cam.ac.uk/research/afha/people/bogdan/macoh/gputest-irispro.png) (throttling), [3D-Nvidia 750M](http://www.damtp.cam.ac.uk/research/afha/people/bogdan/macoh/gputest-gt750m.png) (no throttling).
 
-- Grabs needed free and open source tools: [Intel Power Gadget](https://software.intel.com/en-us/articles/intel-power-gadget-20) (measuring and logging), [HandBrake CLI](http://handbrake.fr) (x264 transcoding), [Prime95](http://mersenne.org) (CPU stress), [GpuTest](http://www.geeks3d.com/gputest/) (GPU stress), [gfxCardStatus](http://gfx.io) (GPU switching), [Ggraphics Layout Engine](http://glx.sourceforge.net) (graph plotting), [ImageMagick](http://www.imagemagick.org) (better image processing than sips)
-- Grabs the free movie [Big Buck Bunny](http://www.bigbuckbunny.org) in 1080p (692 MB)
-- Can run x264 transcodes, Prime95, GpuTest or a custom command of your choice
-- Monitors and logs CPU temperature and frequency while the test is underway
+- Grabs free and open source tools as needed: [Intel Power Gadget](https://software.intel.com/en-us/articles/intel-power-gadget-20) (measuring and logging), [HandBrake CLI](http://handbrake.fr) (x264 transcoding), [Prime95](http://mersenne.org) (CPU stress), [GpuTest](http://www.geeks3d.com/gputest/) (GPU stress), [gfxCardStatus](http://gfx.io) (GPU switching), [Ggraphics Layout Engine](http://glx.sourceforge.net) (graph plotting), [ImageMagick](http://www.imagemagick.org) (better image processing than sips)
+- Grabs the free movie [Big Buck Bunny](http://www.bigbuckbunny.org) in 1080p (692 MB) as needed
+- Can run x264 transcodes, Prime95, GpuTest or a custom command/script of your choice
+- Monitors and logs CPU temperature and frequency during the test
 - Plots a graph of CPU temperature and frequency vs. time
-- Reports some metrics of the x264 and GpuTest benchmarks
 
-**Stress:** The Prime95 test is bound to cause throttling on laptops. It uses small in-place FFTs in a loop which cause stress levels that are simply not found in practice. The x264 is more realistic. Still stressful, but closer to what you'd meet in demanding apps.
+Expect Prime95 to cause throttling on laptops. The x264 test is more realistic; still stressful, but closer to what you'd meet in demanding apps. The 3D GpuTest, when run on integrated GPU, can also cause CPU throttling.
 
-**Disclaimer:** As per the usual nitty gritty, I cannot be held responsible if your spouse leaves you as a result of running this tool, or worse: if your Mac gets damaged. Most likely you'll be just fine though.
+Feedback
+--------
+
+The [dedicated thread on MacRumors forums](http://forums.macrumors.com/showthread.php?t=1731178) started containing results and discussions. Your contribution there would be very welcome. If it doesn't work for you, or if you find bugs, have suggestions, questions or comments then [drop a line on Github](https://github.com/qnxor/macoh/issues) or just [contact](http://www.damtp.cam.ac.uk/user/abr28) me.
+
+**Disclaimer:** As per the usual nitty gritty, I cannot be held responsible if your spouse leaves you after running this tool, or worse: if your Mac gets damaged. Most likely you'll be just fine though.
 
 Usage
 -----
@@ -23,13 +27,15 @@ Usage
 1. Open Terminal and do `bash macoh.sh`
 1. Choose a command in the (old school) menu
 
-### Command line alternative
+#### Config file
 
-Command line options are available if you prefer typing or scripting. The syntax is:
+There is a `macoh.conf` configuration file which you can edit it to set defaults. It is sourced by Bash in the main script so make sure you use valid Bash syntax.
 
-`bash macoh.sh [OPTION VALUE [OPTION VALUE ...]]`
+#### Command line alternative
 
-#### Options
+`bash macoh.sh [-OPTION VALUE [-OPTION VALUE ...]]`
+
+Where -OPTION VALUE can be:
 
 - `-do` - launch a test, one of: *x264*, *x264-long*, *gputest*, *prime95*
 - `-get` - fetch one of: *ipg*, *gle*, *gfx*, *imagick*, *video*, *handbrake*, *gputest*, *prime95*. These are downloaded as necessary upon launching of a test but can be invoked separately. The script will prompt if it detects already downloaded/installed items. Downloads are placed in $HOME/macoh/tmp and installations in $HOME/macoh/bin.
@@ -49,26 +55,13 @@ Command line options are available if you prefer typing or scripting. The syntax
 
 `macoh.sh -time 180 -cmd /Applications/Heaven.app/Contents/MacOS/heaven` will launch the Unigine Heaven 3D benchmark (installed separately) and will kill it after 180 seconds unless you quit it by then. You must start the Heaven benchmark manually once its app GUI opens since the script has no control over it.
 
-### Config file (macoh.conf)
+#### Uninstall, Folders, etc.
 
-There is a `macoh.conf` configuration file which contains more options (e.g. Prime95 options). You can edit it to set default values. It is sourced by Bash in the main script so just make sure you use valid Bash syntax.
+To unistall, do: *(1)* /Applications > Intel Power Gadget > Uninstaller and *(2)* `rm -rf ~/macoh/*/*`. The latter wipes everything except generated graphs and downloaded video (note the `/*/*`).
 
-### Executable, Folders and Uninstall
+The script writes only to your home dir in `$HOME/macoh`. The only exception is Intel Power Gadget which is installed in /Applications.
 
-You can make it executable with `chmod u+x macoh.sh` if you wish, and then do `./macoh.sh`.
-
-The script downloads and writes only to your home dir in `$HOME/macoh`, though you can change this location in macoh.conf. The only exception is Intel Power Gadget which is installed in /Applications.
-
-To unistall, just do the following two steps: (1) /Applications > Intel Power Gadget > Uninstaller and (2) `rm -rf ~/macoh/*/*`. The latter wipes everything except generated graphs and downloaded video (note the `/*/*`).
-
-Feedback
---------
-
-There is a [thread on MacRumors](http://forums.macrumors.com/showthread.php?t=1731178) which started containing results of this script and discussions on findings. Your contribution there would be very welcome.
-
-So far it seems to work fine on Mac OSX Mavericks and recent hardware (Ivy Bridge and Haswell). If it doesn't work for you, you find bugs or have suggestions then please [drop a line on Github](https://github.com/qnxor/macoh/issues).
-
-You can also reach me at http://www.damtp.cam.ac.uk/user/abr28
+You can make it executable with `chmod u+x macoh.sh` and then do `./macoh.sh`.
 
 Known issues
 ------------
@@ -92,6 +85,7 @@ Todo
 Changelog
 ---------
 
+- 1.2.3-beta, 2014-05-11 - More compact menu
 - 1.2.2-beta, 2014-05-11 - Safer CPU priority code; fixed bug in perf stats between multiple runs
 - 1.2.1-beta, 2014-05-11 - CPU priority of HandBrake and GpuTest can now be changed (menu, conf); more bug fixes.
 - 1.2.0-beta, 2014-05-09 - GpuTest stats on graphs, cleaner code, lots of bug fixes
