@@ -29,7 +29,7 @@ Usage
 
 #### Config file
 
-There is a `macoh.conf` configuration file which you can edit it to set defaults. It is sourced by Bash in the main script so make sure you use valid Bash syntax.
+There is a `macoh.conf` configuration file which you can edit it to set various options (defaults). It is sourced by Bash in the main script so make sure you use valid Bash syntax.
 
 #### Command line alternative
 
@@ -66,8 +66,6 @@ You can make it executable with `chmod u+x macoh.sh` and then do `./macoh.sh`.
 Known issues
 ------------
 
-Prime95 for Mac has [a bug](http://www.mersenneforum.org/showthread.php?p=372979#post372918), it doesn't start the torture test as instructed when it opens. For now, do it manually once the `macoh` opens the GUI. Some killer settings (expect throttling on laptops) are: `Options` > `Torture Test` > `Custom` > `MinFFT=8, MaxFFT=8, RunFFTsInPlace=Checked (or use Memory=8), TimeForEachFFT=5` > `Run`
-
 gfxCardStatus has [a bug](https://github.com/codykrieger/gfxCardStatus/issues/103), it needs somes convincing to switch the GPU. The `macoh` script makes two attempts and normally gets it. Just in case it doesn't, you may need to insist or open the app normally (via Finder/Spotlight) and switch the GPU there.
 
 Todo
@@ -86,6 +84,7 @@ Todo
 Changelog
 ---------
 
+- 1.3.0-beta, 2014-05-13 - Compiled Prime95 for command line (mprime), Prime95 can be started automatically, added Prime95 menu options, separate GpuTest and Prime95 durations in menu, cleaner menu, some bug fixes
 - 1.2.3-beta, 2014-05-11 - More compact menu
 - 1.2.2-beta, 2014-05-11 - Safer CPU priority code; fixed bug in perf stats between multiple runs
 - 1.2.1-beta, 2014-05-11 - CPU priority of HandBrake and GpuTest can now be changed (menu, conf); more bug fixes.

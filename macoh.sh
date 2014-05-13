@@ -13,15 +13,16 @@ home=~/macoh
 usercmd=''
 waitstart=15
 waitend=15
-timeout=300
 gputest=tess_x64
 gpuwidth=1280
 gpuheight=720
 gpumsaa=2
-p95minfft=8
-p95maxfft=8
-p95mem=8
-p95timefft=5
+gpuduration=600
+p95min=8
+p95max=8
+p95mem=0
+p95time=5
+p95duration=300
 p95nice=0
 hbnice=-10
 gpunice=-10
@@ -35,7 +36,8 @@ url_ipg="https://software.intel.com/sites/default/files/IntelPowerGadget3.0.1.zi
 url_handbrake="http://heanet.dl.sourceforge.net/project/handbrake/0.9.9/HandBrake-0.9.9-MacOSX.6_CLI_x86_64.dmg"
 url_gle="http://heanet.dl.sourceforge.net/project/glx/gle4%20(Current%20Active%20Version)/4.2.4c/gle-graphics-4.2.4c-exe-mac.dmg"
 url_video="http://blender-mirror.kino3d.org/peach/bigbuckbunny_movies/big_buck_bunny_1080p_h264.mov"
-url_prime95="ftp://mersenne.org/gimps/p95v285.MacOSX.zip"
+# url_prime95="ftp://mersenne.org/gimps/p95v285.MacOSX.zip"
+url_prime95="https://github.com/qnxor/macoh/raw/master/mprime.tgz"
 url_gputest="http://www.ozone3d.net/gputest/dl/GpuTest_OSX_x64_0.7.0.zip"
 url_gputest_referer="http://www.geeks3d.com/20140304/gputest-0-7-0-opengl-benchmark-win-linux-osx-new-fp64-opengl-4-test-and-online-gpu-database/"
 url_gfx="https://github.com/qnxor/macoh/raw/master/gfxCardStatus.tgz"
@@ -87,7 +89,7 @@ silentkill () {
 	# Die with dignity. Kill if stubborn.
 	# Add brackets ( ) around bg processes so we suppress "stopped" messsages
 	( { sleep 0.25; kill -TERM $* &>/dev/null; } & )
-	( { sleep 3; kill -KILL $* &>/dev/null; } & )
+	( { sleep 5; kill -KILL $* &>/dev/null; } & )
 	# The 'wait' trick only works for subprocess of the current shell, should be fine
 	# It suppresses the "terminated" background messages.
 	# "wait" returns 127 if process not found (thanks!). We return 0 always.
@@ -165,6 +167,17 @@ benice () {
 }
 getfuncdef () {
 	declare -f $1
+}
+freemb () {
+	local IFS=$'\n\t .'
+	local page=(`vm_stat | grep -oE "page size of [0-9]+ bytes" 2>/dev/null`)
+	local free=(`vm_stat | grep "^Pages free:" 2>/dev/null`)
+	IFS=$'\n\t '
+	page=${page[3]}
+	free=${free[2]}
+	[[ $page -gt 0 && $free -gt 0 ]] || { echo && return 0; }
+	free=`echo "($page*$free)/1048576" | bc -l`
+	echo ${free/.*/}
 }
 
 #------------------------------ GET functions ------------------------------#
@@ -247,23 +260,14 @@ moh-get-prime95 ()
 	echo
 	local ans=y
 	# md5=0390ae2ff3d4a7082927482d82e62f59
-	[[ -d $bin/Prime95.app && $1 != force ]] && \
+	[[ -x $bin/mprime && $1 != force ]] && \
 		read -p "Prime95 seems to be installed. Redownload? [n] " ans
 	if [[ $ans = y || $ans = Y ]]; then
 		set -e
-		rm -f $bin/done-prime95
+		rm -f $bin/done-prime95 $bin/mprime
 		echo Fetching Prime95 into $bin ...
-		wget $tmp/prime95.zip "$url_prime95" -#
-		# zip file from mersenne.org causes unzip to exit with 1, even though it extracts ok
-		if ! unzip -q -o $tmp/prime95.zip -d $tmp 2>$tmp/unziperr.log; then
-			local e=$?
-			sed -E '/ucsize [0-9]* <> csize|continuing with/d' $tmp/unziperr.log | \
-				grep -qE '.' && cat $tmp/unziperr.log && die $e "unzip failed"
-		fi
-		[[ -d $bin/Prime95.app ]] && rm -rf $bin/Prime95.app
-		cp -rf $tmp/Prime95.app $bin
-		rm -rf $tmp/Prime95.app
-		chmod 755 $bin/Prime95.app/Contents/MacOS/Prime95
+		wget $tmp/mprime.tgz "$url_prime95" -#
+		tar -C $bin -zxf $tmp/mprime.tgz
 		> $bin/done-prime95
 	fi
 }
@@ -349,7 +353,7 @@ moh-check-x264 ()
 moh-check-prime95 ()
 {
 	moh-check-common
-	[[ -r $bin/done-prime95 && -d $bin/Prime95.app ]] || moh-get-prime95 force
+	[[ -r $bin/done-prime95 && -x $bin/mprime ]] || moh-get-prime95 force
 }
 
 # Check if all Prime95 test dependencies exist and download/install if not
@@ -390,7 +394,7 @@ moh-do-gputest ()
 	moh-wrapper GpuTest <<-SH
 		$(getfuncdef benice)
 		benice GpuTest $gpunice &
-		$bin/GpuTest.app/Contents/MacOS/GpuTest '/test=$gputest /width=$gpuwidth /height=$gpuheight /msaa=$gpumsaa /benchmark /benchmark_duration_ms=${timeout}000 /no_scorebox' &>/dev/null
+		$bin/GpuTest.app/Contents/MacOS/GpuTest '/test=$gputest /width=$gpuwidth /height=$gpuheight /msaa=$gpumsaa /benchmark /benchmark_duration_ms=${gpuduration}000 /no_scorebox' &>/dev/null
 	SH
 }
 
@@ -401,48 +405,55 @@ moh-do-prime95 ()
 	do=prime95
 	moh-check-prime95
 
-	local workdir=~/Prime95
-	[[ -d $workdir ]] && rm -rf $workdir
-	mkdir -p $workdir
+	# local workdir=~/Prime95
+	# [[ -d $workdir ]] && rm -rf $workdir
+	# mkdir -p $workdir
 
-	cat <<-STR
+	# cat <<-STR
 
-                              ---------------
-                               W A R N I N G
-                              ---------------
+ #                              ---------------
+ #                               W A R N I N G
+ #                              ---------------
 
-		There is a bug in Prime95, the torture test does not start automatically when the GUI opens. For now, do it manually once the GUI opens as follows:
+	# 	There is a bug in Prime95, the torture test does not start automatically when the GUI opens. For now, do it manually once the GUI opens as follows:
 
-		Options -> Torture Test -> Custom -> MinFFT=$p95minfft, MaxFFT=$p95maxfft, Memory=$p95mem, Time=$p95timefft -> Run.
+	# 	Options -> Torture Test -> Custom -> MinFFT=$p95min, MaxFFT=$p95max, Memory=$p95mem, Time=$p95time -> Run.
 
-		Press any key to start Prime95 ...
+	# 	Press any key to start Prime95 ...
 	
-	STR
-	read -s -n 1
+	# STR
+	# read -s -n 1
 
-	# 8k in-place FFTs (in-place when TortureMem <= 8) ... most stressful
-	# For blend: Min=8, Max=1792, Mem=2048, Time=5
+	# Small in-place: Min=8,Max=8,Mem=8 (in-place when TortureMem = 0)
+	# Large in-place: Min=128,Max=1024,Mem=8 (in-place when TortureMem = 0)
+	# Blend: Min=8, Max=1792, Mem=2048
 	# For small with some mem: Min=8, Max=16, Mem=512, Time=5
-	cat > $workdir/prime.txt <<-TXT
-		MinTortureFFT=$p95minfft
-		MaxTortureFFT=$p95maxfft
-		TortureMem=$p95mem
-		TortureTime=$p95timefft
+	cat > $bin/prime.txt <<-TXT
 		V24OptionsConverted=1
+		WGUID_version=2
 		StressTester=1
 		UsePrimenet=0
+		MinTortureFFT=$p95min
+		MaxTortureFFT=$p95max
+		TortureMem=$p95mem
+		TortureTime=$p95time
 		Nice=$p95nice
-		ManualComm=1
+
+		[PrimeNet]
+		Debug=0
 	TXT
+	# ManualComm=1
 	# SumInputsErrorCheck=0
 	# ErrorCheck=0
 	# StaggerStarts=1
-	# WGUID_version=2
 	# MergeWindows=12
 	# NoMoreWork=0
 
-	moh-wrapper Prime95 $timeout <<-SH
-		$bin/Prime95.app/Contents/MacOS/Prime95 -t -W$workdir
+	moh-wrapper Prime95 $p95duration <<-SH
+		echo
+		# $bin/mprime -t -W$bin | sed -E '/Please read|Beginning a|Worker starting|Setting affinity/d'
+		$bin/mprime -t -W$bin
+		echo
 	SH
 }
 
@@ -571,7 +582,7 @@ moh-gpuswitch-menu () {
 ## For now it does nothing since Prime95 is killed forcefully as it lacks a
 ## stop condition
 moh-perf-prime95 () {
-	perf=''
+	perf="min:$p95min, max:$p95max, mem:$p95mem, time:$p95time"
 }
 
 ## Parse HandBrake log and populate the global $duration, $mins, $secs, $perf
@@ -606,7 +617,7 @@ moh-perf-gputest () {
 	gpu=${gpu/NVIDIA/Nvidia}
 	gpu=${gpu/GeForce /}
 	local fps=`echo "$frames/$duration" | bc -l`
-	perf="${fps:0:5}, ${gpuwidth}x$gpuheight, ${gpumsaa}xAA, $gpu"
+	perf="${fps:0:5} fps, ${gpuwidth}x$gpuheight, ${gpumsaa}xAA, $gpu"
 }
 
 ## Wrapper to start, monitor and log any job which is read from stdin
@@ -640,7 +651,7 @@ moh-wrapper ()
 	[[ $2 -gt 0 ]] && watchdog=$(getfuncdef silentkill)'
 	echo "Waiting max '$(humantime $2)' to terminate."
 	( sleep '$2'; pids=`pgrep -P $$` && { sleep 3 && kill -KILL $pids &>/dev/null & } && kill -TERM $pids; ) &>/dev/null &
-	# { sleep '$2'; pids=`pgrep -P $$ 2>/dev/null` && silentkill $pids; } &
+	# ( { sleep '$2'; pids=`pgrep -P $$ 2>/dev/null` && silentkill $pids; } & )
 	'
 
 	# Is the code using sudo? If so, ask for the password now to avoid the
@@ -856,6 +867,8 @@ esac
 	dolist=$(functionlist "moh-do-" ", ")
 	dore=$(functionlist "moh-do-" "|")
 	[[ $do =~ ^$dore$ ]] || die $ERR_CMDLINE "-do requires one of: $dolist"
+	[[ $do = gputest && -n $timeout ]] && gpuduration=$timeout
+	[[ $do = prime95 && -n $timeout ]] && p95duration=$timeout
 	moh-do-$do
 	exit $?
 }
@@ -878,30 +891,41 @@ esac
 # If only the -g/-gpuswitch was used, exit (allows scripting)
 [[ -n $gpuswitch ]] && exit $ecode
 
+freemb
+
 # If not, show menu
 while [[ 1 ]]; do
 	s_hbnice=`printf '%-5s' "[$hbnice]"`
 	s_gpunice=`printf '%-5s' "[$gpunice]"`
-	s_timeout=`printf '%-10s' "[$(humantime $timeout)]"`
+	s_p95dur=`printf '%-10s' "[$(humantime $p95duration)]"`
+	s_gpudur=`printf '%-10s' "[$(humantime $gpuduration)]"`
 	s_res=`printf '%-11s' "[${gpuwidth}x$gpuheight]"`
+	s_p95min=`printf '%-8s' "[${p95min}k]"`
+	s_p95max=`printf '%-8s' "[${p95max}k]"`
+	[[ $p95mem = 0 ]] && s_p95mem='[in-place]' || s_p95mem=`printf '%-10s' "[${p95mem}MB]"`
+	s_p95time=`printf '%-8s' "[${p95time}m]"`
+
+ # H. HandBrake priority $s_hbnice            U. GpuTest priority $s_gpunice
+
 	echo -n "
 -----------------------------------------------------------------------------
-           MacOH 1.2.3-beta. Quit all other apps before launching.          
+           MacOH 1.3.0-beta. Quit all other apps before launching.          
 ----------------------------------------------------------------------- Tests
  X. x264 transcode (5-6 mins on a Core i7-4850HQ)
  Y. Longer x264 transcode (~4x longer)
- P. Prime95 (in-place small FFTs, very stressful for the CPU)
- G. 3D GpuTest (switch GPU to integrated/discrete beforehand)
+ P. Prime95 (very stressful for the CPU)
+ G. 3D GpuTest (switch GPU beforehand)
  S. Switch GPU to integrated or discrete
 -------------------------------------------------------------------- Settings
- T. GpuTest/Pr95 duration $s_timeout    W. GpuTest type [$gputest]
- H. HandBrake priority $s_hbnice            U. GpuTest priority $s_gpunice
- R. GpuTest resolution $s_res      M. GpuTest MSAA [$gpumsaa]
+ D. Prime95 Duration $s_p95dur        T. GpuTest Duration $s_gpudur
+ N. Prime95 min FFT size $s_p95min      W. GpuTest type [$gputest]
+ A. Prime95 max FFT size $s_p95max      R. GpuTest resolution $s_res
+ F. Prime95 FFT memory $s_p95mem      M. GpuTest MSAA [$gpumsaa]
 -------------------------------------------------------------------- Download
- 1. Intel Power Gadget (2.3 MB)         2. Prime95 (3.3 MB)
- 3. HandBrakeCLI (6.9 MB)               4. GpuTest (1.8 MB)
- 5. Graphics Layout Engine (13 MB)      6. Big Buck Bunny movie (691 MB)
- 7. gfxCardStatus GPU switch (1 MB)
+ 1. Intel Power Gadget (2.3 MB)        5. Prime95 (1 MB)
+ 2. Graphics Layout Engine (13 MB)     6. HandBrakeCLI (6.9 MB)
+ 3. gfxCardStatus GPU switch (1 MB)    7. GpuTest (1.8 MB)
+ 4. Big Buck Bunny movie (691 MB)
 -----------------------------------------------------------------------------
 Your choice: [Q=Quit] "
 	read ans
@@ -911,12 +935,12 @@ Your choice: [Q=Quit] "
 	set -e
 
 	[[ $ans = 1 ]] && { moh-get-ipg; continue; }
-	[[ $ans = 5 ]] && { moh-get-gle; continue; }
-	[[ $ans = 2 ]] && { moh-get-prime95; continue; }
-	[[ $ans = 4 ]] && { moh-get-gputest; continue; }
-	[[ $ans = 3 ]] && { moh-get-handbrake; continue; }
-	[[ $ans = 6 ]] && { moh-get-video; continue; }
-	[[ $ans = 7 ]] && { moh-get-gfx; continue; }
+	[[ $ans = 2 ]] && { moh-get-gle; continue; }
+	[[ $ans = 5 ]] && { moh-get-prime95; continue; }
+	[[ $ans = 7 ]] && { moh-get-gputest; continue; }
+	[[ $ans = 6 ]] && { moh-get-handbrake; continue; }
+	[[ $ans = 4 ]] && { moh-get-video; continue; }
+	[[ $ans = 3 ]] && { moh-get-gfx; continue; }
 
 	[[ $ans =~ ^[gG]$ ]] && { moh-do-gputest; [[ $menuquit = 1 ]] && exit || { anykey; continue; } }
 	[[ $ans =~ ^[pP]$ ]] && { moh-do-prime95; [[ $menuquit = 1 ]] && exit || { anykey; continue; } }
@@ -924,41 +948,61 @@ Your choice: [Q=Quit] "
 	[[ $ans =~ ^[xX]$ ]] && { moh-do-x264;  [[ $menuquit = 1 ]] && exit || { anykey; continue; } }
 	[[ $ans =~ ^[sS]$ ]] && { moh-gpuswitch-menu; continue; }
 
+	[[ $ans =~ ^[dD]$ ]] && {
+		read -p "Prime95 duration in seconds: [$p95duration] " x;
+		[[ $x -gt 0 ]] && editconf p95duration $x && continue
+		[[ -z $x ]] && continue
+		menuerr="Duration must be a number greater than 0"
+	}
+
+	[[ $ans =~ ^[nN]$ ]] && { 
+		read -p "Prime95 minimum FFT size (thousands): [$p95min] " x
+		[[ -z $x ]] && continue
+		[[ $x -gt 0 && $x -le $p95max && $x =~ ^[0-9]+$ ]] && editconf p95min $x && continue
+		menuerr="The Prime95 min FFT size must be a positive integer smaller or equal to the max FFT size ($p95max)"
+	}
+
+	[[ $ans =~ ^[aA]$ ]] && { 
+		read -p "Prime95 maximum FFT size (thousands): [$p95max] " x
+		[[ -z $x ]] && continue
+		[[ $x -ge $p95min && $x =~ ^[0-9]+$ ]] && editconf p95max $x && continue
+		menuerr="The Prime95 max FFT size must be a positive integer greater or equal to the min FFT size ($p95min)"
+	}
+
+	[[ $ans =~ ^[fF]$ ]] && { 
+		read -p "Prime95 FFT memory (MB), use 0 to do the FFTs in-place (CPU stressful): [$p95mem] " x
+		[[ -z $x ]] && continue
+		free=$(freemb)
+		[[ -n $free ]] && let free2=free/2
+		[[ $x -ge 0 && $x =~ ^[0-9]+$ && ( -z $free || $x -le $free2 ) ]] && editconf p95mem $x && continue
+		menuerr="The Prime95 FFT memory must be a positive integer less than half your free RAM ($free/2=$free2)"
+	}
+
+	[[ $ans =~ ^[tT]$ ]] && {
+		read -p "GpuTest duration in seconds: [$timeout] " x;
+		[[ $x -gt 0 ]] && editconf gpuduration $x && continue
+		[[ -z $x ]] && continue
+		menuerr="Duration must be a number greater than 0"
+	}
+
 	[[ $ans =~ ^[wW]$ ]] && { 
 		menu "Choose GpuTest benchmark:" "$gputest" ${gputesttypes//,/}
 		[[ $menuchoice = $gputest ]] || editconf gputest $menuchoice
 		continue
 	}
 
-	[[ $ans =~ ^[tT]$ ]] && {
-		read -p "New duration in seconds: [$timeout] " x;
-		[[ $x -gt 0 ]] && editconf timeout $x && continue
-		[[ -z $x ]] && continue
-		menuerr="Duration must be a number greater than 0"
-	}
-
-	[[ $ans =~ ^[hH]$ ]] && {
-		read -p "New HandBrake priority in -19...20 (smaller values means higher priority): [$hbnice] " x;
-		[[ -z $x ]] && continue
-		[[ $x =~ ^-?[0-9]+$ && $x -ge -19 && $x -le 20 ]] && editconf hbnice $x && {
-			[[ $x -lt 0 ]] && anykey "Negative value entered, your password will be required. Press any key to continue ..."
-			continue
-		}
-		menuerr="Priority (nice level) must be an integer in -19,...,20"
-	}
-
 	[[ $ans =~ ^[uU]$ ]] && {
-		read -p "New GpuTest priority in -19...20 (smaller values means higher priority): [$gpunice] " x;
+		read -p "GpuTest priority in -19...20 (smaller values means higher priority): [$gpunice] " x;
 		[[ -z $x ]] && continue
 		[[ $x =~ ^-?[0-9]+$ && $x -ge -19 && $x -le 20 ]] && editconf gpunice $x && {
 			[[ $x -lt 0 ]] && anykey "Negative value entered, your password will be required. Press any key to continue ..."
 			continue
 		}
-		menuerr="Priority (nice level) must be an integer in -19,...,20"
+		menuerr="Priority (niceness) must be an integer in -19...20"
 	}
 
 	[[ $ans =~ ^[rR]$ ]] && { 
-		read -p "New resolution: [${gpuwidth}x$gpuheight] " x
+		read -p "GpuTest resolution: [${gpuwidth}x$gpuheight] " x
 		[[ -z $x ]] && continue
 		[[ $x =~ ^[0-9]+x[0-9]+$ ]] && editconf gpuwidth ${x/x*/} \
 			&& editconf gpuheight ${x/*x/} && continue
@@ -966,10 +1010,20 @@ Your choice: [Q=Quit] "
 	}
 
 	[[ $ans =~ ^[mM]$ ]] && { 
-		read -p "New MSAA (0, 2, 4 or 8): [$gpumsaa] " x
+		read -p "GpuTest MSAA value (0, 2, 4 or 8): [$gpumsaa] " x
 		[[ -z $x ]] && continue
 		[[ $x =~ ^[0248]$ ]] && editconf gpumsaa $x && continue
 		menuerr="MSAA value must be 0, 2, 4 or 8"
+	}
+
+	[[ $ans =~ ^[hH]$ ]] && {
+		read -p "HandBrake priority in -19...20 (smaller values means higher priority): [$hbnice] " x;
+		[[ -z $x ]] && continue
+		[[ $x =~ ^-?[0-9]+$ && $x -ge -19 && $x -le 20 ]] && editconf hbnice $x && {
+			[[ $x -lt 0 ]] && anykey "Negative value entered, your password will be required. Press any key to continue ..."
+			continue
+		}
+		menuerr="Priority (niceness) must be an integer in -19...20"
 	}
 
 	[[ -z $menuerr ]] && menuerr="Unknown option '$ans'"
