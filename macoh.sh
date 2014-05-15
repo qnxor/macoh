@@ -891,8 +891,6 @@ esac
 # If only the -g/-gpuswitch was used, exit (allows scripting)
 [[ -n $gpuswitch ]] && exit $ecode
 
-freemb
-
 # If not, show menu
 while [[ 1 ]]; do
 	s_hbnice=`printf '%-5s' "[$hbnice]"`
