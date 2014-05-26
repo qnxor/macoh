@@ -11,6 +11,7 @@ set -e
 
 home=~/macoh
 usercmd=''
+usercmdduration=300
 waitstart=15
 waitend=15
 gputest=tess_x64
@@ -381,7 +382,7 @@ moh-cmd ()
 {
 	do=usercmd
 	moh-check-usercmd
-	echo "$usercmd" | moh-wrapper UserCmd $timeout
+	echo "$usercmd" | moh-wrapper UserCmd $usercmdduration
 }
 
 # Run GpuTest
@@ -507,7 +508,7 @@ moh-gpudetect () {
 		if [[ "$log" =~ GPUs\ present:\ \([^\)]+$'\n'\) ]]; then
 			log=${log/*GPUs present: (/}
 			log=${log/)*/}
-			log=${log//[\",]/}
+			log="${log//[\",]/}"
 			local IFS=$'\n'
 			log=($log)
 			local IFS=$'\n\t '
@@ -884,6 +885,7 @@ esac
 
 # Cmd line user command?
 [[ -n $usercmd ]] && {
+	[[ $timeout -ge 0 ]] && usercmdduration=$timeout
 	moh-cmd
 	exit $?
 }
@@ -907,7 +909,7 @@ while [[ 1 ]]; do
 
 	echo -n "
 -----------------------------------------------------------------------------
-           MacOH 1.3.0-beta. Quit all other apps before launching.          
+           MacOH 1.3.1-beta. Quit all other apps before launching.          
 ----------------------------------------------------------------------- Tests
  X. x264 transcode (5-6 mins on a Core i7-4850HQ)
  Y. Longer x264 transcode (~4x longer)

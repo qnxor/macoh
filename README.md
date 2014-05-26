@@ -1,5 +1,5 @@
-MacOH
-=====
+MacOH 1.3.1-beta
+================
 
 Small tool for Mac OS X that automatically downloads and installs tools and content and runs CPU or GPU stress tests, monitoring CPU temperature and frequency which are plotted versus time. The purpose is to evaluate CPU throttling and/or overheating (not performance).
 
@@ -40,7 +40,7 @@ Where -OPTION VALUE can be:
 - `-do` - launch a test, one of: *x264*, *x264-long*, *gputest*, *prime95*
 - `-get` - fetch one of: *ipg*, *gle*, *gfx*, *imagick*, *video*, *handbrake*, *gputest*, *prime95*. These are downloaded as necessary upon launching of a test but can be invoked separately. The script will prompt if it detects already downloaded/installed items. Downloads are placed in $HOME/macoh/tmp and installations in $HOME/macoh/bin.
 - `-cmd` - A user defined command to execute and monitor. This must be the last option in the command line, everything after it is considered part of the user command. You can use this to launch your own stress test to be monitored and have the temp and freq vs time plotted. The command must not terminate immediately (e.g. do not use ''open MyBenchmark.app''). Also take note of the duration value (`-t`) below. The -cmd option needs more thorough testing, please report bugs.
-- `-t,-time` - duration of Prime95, GpuTest and user defined command (default is 5 minutes, see macoh.conf). Use 0 to run indefinitely. Prime95 and the user defined command are assumed to run indefintely by default, so this option is used to kill them after the specified duration, unless they exited or if you quit them by then.
+- `-t,-time` - duration of Prime95, GpuTest and user defined command in seconds, use 0 to run indefinitely (default is 600 for GpuTest and 300 for the rest, see macoh.conf). Prime95 and the user defined command are assumed to run indefintely by default, so this option is used to stop them, unless they exit or if you abort them early.
 - `-w,-wait` - waiting time before the test, to get idle temperature (default is 15 seconds, see macoh.conf)
 - `-g,-gputest` - change the GpuTest type to one of: *fur*, *tess_x8*, *tess_x16*, *tess_x32*, *tess_x64*, *gi*,*pixmark_piano*, *pixmark_volplosion*, *plot3d*, *triangle* (default is *tess_x64*, see macoh.conf)
 - `-r,-res` - change the resolution of GpuTest (default is 1280x720, unless altered in macoh.conf)
@@ -80,17 +80,3 @@ Todo
 - [ ] Uninstall/clean option [#4](//github.com/qnxor/macoh/issues/4)
 - [ ] Auto-upload results and graph somewhere (with prompt)?
 - [ ] Cross-platform version?
-
-Changelog
----------
-
-- 1.3.0-beta, 2014-05-13 - Compiled Prime95 for command line (mprime), Prime95 can be started automatically, added Prime95 menu options, separate GpuTest and Prime95 durations in menu, cleaner menu, some bug fixes
-- 1.2.3-beta, 2014-05-11 - More compact menu
-- 1.2.2-beta, 2014-05-11 - Safer CPU priority code; fixed bug in perf stats between multiple runs
-- 1.2.1-beta, 2014-05-11 - CPU priority of HandBrake and GpuTest can now be changed (menu, conf); more bug fixes.
-- 1.2.0-beta, 2014-05-09 - GpuTest stats on graphs, cleaner code, lots of bug fixes
-- 1.1.2-beta, 2014-05-08 - Added GPU switching to command line.
-- 1.1.1-beta, 2014-05-07 - Bug fixing release. 
-- 1.1.0-beta, 2014-05-06 - Added GpuTest, Prime95, gfxCardStatus, longer x264 test, more command line options.
-- 1.0.1-alpha, 2014-05-03 - Added command line options to bypass menu
-- 1.0.0-alpha, 2014-05-02 - First version
