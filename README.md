@@ -1,4 +1,4 @@
-MacOH 1.3.1-beta
+MacOH 1.3.3-beta
 ================
 
 Small tool for Mac OS X that automatically downloads and installs tools and content and runs CPU or GPU stress tests, monitoring CPU temperature and frequency which are plotted versus time. The purpose is to evaluate CPU throttling and/or overheating (not performance).
@@ -80,3 +80,8 @@ Todo
 - [ ] Uninstall/clean option [#4](//github.com/qnxor/macoh/issues/4)
 - [ ] Auto-upload results and graph somewhere (with prompt)?
 - [ ] Cross-platform version?
+
+Credits
+-------
+
+A local version of Intel Power Gadget is stored in the project for consistency. All copyright is of Intel. Binary versions of the open source applications ImageMagick, gfxCardStatus and Prime95 are also stored in the project. The sources of gfxCardStatus and Prime95 were modified and compiled to fit the current project.
