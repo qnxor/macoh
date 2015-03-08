@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- 1.3.4-beta, 2015-03-08 - Fixed Handbrake URL
 - 1.3.1-beta, 2014-05-26 - User defined command timeout fix
 - 1.3.0-beta, 2014-05-13 - Compiled Prime95 for command line (mprime), Prime95 can be started automatically, added Prime95 menu options, separate GpuTest and Prime95 durations in menu, cleaner menu, some bug fixes
 - 1.2.3-beta, 2014-05-11 - More compact menu

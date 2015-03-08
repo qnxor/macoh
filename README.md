@@ -1,5 +1,5 @@
-MacOH 1.3.3-beta
-================
+MacOH
+=====
 
 Small tool for Mac OS X that automatically downloads and installs tools and content and runs CPU or GPU stress tests, monitoring CPU temperature and frequency which are plotted versus time. The purpose is to evaluate CPU throttling and/or overheating (not performance).
 

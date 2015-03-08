@@ -34,7 +34,7 @@ mkv=/dev/null
 gputesttypes='fur, tess_x8, tess_x16, tess_x32, tess_x64, gi, pixmark_piano, pixmark_volplosion, plot3d, triangle'
 testid=`date +%Y%m%d-%H%M%S`
 url_ipg="https://software.intel.com/sites/default/files/IntelPowerGadget3.0.1.zip"
-url_handbrake="http://heanet.dl.sourceforge.net/project/handbrake/0.9.9/HandBrake-0.9.9-MacOSX.6_CLI_x86_64.dmg"
+url_handbrake="http://download.handbrake.fr/releases/0.9.9/HandBrake-0.9.9-MacOSX.6_CLI_x86_64.dmg"
 url_gle="http://heanet.dl.sourceforge.net/project/glx/gle4%20(Current%20Active%20Version)/4.2.4c/gle-graphics-4.2.4c-exe-mac.dmg"
 url_video="http://blender-mirror.kino3d.org/peach/bigbuckbunny_movies/big_buck_bunny_1080p_h264.mov"
 # url_prime95="ftp://mersenne.org/gimps/p95v285.MacOSX.zip"
@@ -909,11 +909,11 @@ while [[ 1 ]]; do
 
 	echo -n "
 -----------------------------------------------------------------------------
-           MacOH 1.3.1-beta. Quit all other apps before launching.          
+           MacOH 1.3.4-beta. Quit all other apps before launching.          
 ----------------------------------------------------------------------- Tests
  X. x264 transcode (5-6 mins on a Core i7-4850HQ)
  Y. Longer x264 transcode (~4x longer)
- P. Prime95 (very stressful for the CPU)
+ P. Prime95 (extreme CPU stress, expect laptops to throttle!)
  G. 3D GpuTest (switch GPU beforehand)
  S. Switch GPU to integrated or discrete
 -------------------------------------------------------------------- Settings
