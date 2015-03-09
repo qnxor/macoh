@@ -5,13 +5,13 @@ Small tool for Mac OS X that automatically downloads and installs tools and cont
 
 Output examples: [x264](http://www.damtp.cam.ac.uk/research/afha/people/bogdan/macoh/x264.png) (no throttling), [Prime95](http://www.damtp.cam.ac.uk/research/afha/people/bogdan/macoh/prime95.png) (heavy throttling), [3D-Intel 5100](http://www.damtp.cam.ac.uk/research/afha/people/bogdan/macoh/gputest-irispro.png) (throttling), [3D-Nvidia 750M](http://www.damtp.cam.ac.uk/research/afha/people/bogdan/macoh/gputest-gt750m.png) (no throttling).
 
-- Grabs free and open source tools as needed: [Intel Power Gadget](https://software.intel.com/en-us/articles/intel-power-gadget-20) (measuring and logging), [HandBrake CLI](http://handbrake.fr) (x264 transcoding), [Prime95](http://mersenne.org) (CPU stress), [GpuTest](http://www.geeks3d.com/gputest/) (GPU stress), [gfxCardStatus](http://gfx.io) (GPU switching), [Ggraphics Layout Engine](http://glx.sourceforge.net) (graph plotting), [ImageMagick](http://www.imagemagick.org) (better image processing than sips)
-- Grabs the free movie [Big Buck Bunny](http://www.bigbuckbunny.org) in 1080p (692 MB) as needed
-- Can run x264 transcodes, Prime95, GpuTest or a custom command/script of your choice
+- Can do FFTs, x264 encodes, Prime95, GpuTest or a custom command/script of your choice
 - Monitors and logs CPU temperature and frequency during the test
 - Plots a graph of CPU temperature and frequency vs. time
+- Grabs free and open source tools as needed: [Intel Power Gadget](https://software.intel.com/en-us/articles/intel-power-gadget-20) (measuring and logging), [HandBrake CLI](http://handbrake.fr) (x264 transcoding), [Prime95](http://mersenne.org) (CPU stress), [GpuTest](http://www.geeks3d.com/gputest/) (GPU stress), [gfxCardStatus](http://gfx.io) (GPU switching), [Ggraphics Layout Engine](http://glx.sourceforge.net) (graph plotting), [ImageMagick](http://www.imagemagick.org) (better image processing than sips)
+- Grabs the free movie [Big Buck Bunny](http://www.bigbuckbunny.org) in 1080p (692 MB) as needed
 
-Expect Prime95 to cause throttling on laptops. The x264 test is more realistic; still stressful, but closer to what you'd meet in demanding apps. The 3D GpuTest, when run on integrated GPU, can also cause CPU throttling.
+I recommend the FFT test with as many threads as physical cores (this is the default). This is more stressful than most common operations one typically does, but less stressful than the x264 test or Prime95 test. If the FFT test with half the threads is throttling then you have a real problem (2 threads for a quad core CPU). Expect Prime95 to cause heavy throttling on laptops. The x264 test is in between but (on my rMBP at least) it still causes higher power draw than the TDP limit which can trigger throttling. The 3D GpuTest, when run on integrated GPU, can also cause CPU throttling.
 
 Feedback
 --------
@@ -23,7 +23,7 @@ The [dedicated thread on MacRumors forums](http://forums.macrumors.com/showthrea
 Usage
 -----
 
-1. [Donwload](https://github.com/qnxor/macoh/archive/master.zip) the zip and extract somewhere
+1. [Donwload](https://github.com/qnxor/macoh/releases) the latest .zip release and extract it somewhere
 1. Open Terminal and do `bash macoh.sh`
 1. Choose a command in the (old school) menu
 
@@ -84,4 +84,4 @@ Todo
 Credits
 -------
 
-A local version of Intel Power Gadget is stored in the project for consistency. All copyright is of Intel. Binary versions of the open source applications ImageMagick, gfxCardStatus and Prime95 are also stored in the project. The sources of gfxCardStatus and Prime95 were modified and compiled to fit the current project.
+A local version of Intel Power Gadget is stored in the project for consistency. All copyright is of Intel. Binary versions of the open source applications ImageMagick, gfxCardStatus and Prime95 are also stored in the project. Using the [FFTW library](http://fftw.org) for the FFT computations. The sources of gfxCardStatus and Prime95 were modified and compiled to fit the current project.

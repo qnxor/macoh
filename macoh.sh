@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # GitHub project: https://github.com/qnxor/macoh
-# Bogdan Roman, University of Cambridge, 2014
+# Bogdan Roman, University of Cambridge
 # http://www.damtp.cam.ac.uk/research/afha/bogdan
 #
 
@@ -19,18 +19,24 @@ gpuwidth=1280
 gpuheight=720
 gpumsaa=2
 gpuduration=600
+gpunice=-10
 p95min=8
 p95max=8
 p95mem=0
 p95time=5
 p95duration=300
 p95nice=0
+fftduration=300
+fftsize=2048
+fftthreads=`sysctl -n hw.physicalcpu`
+ffttype=0
+fftwisdom=0
+fftnice=-10
 hbnice=-10
-gpunice=-10
 menuquit=0
 mov=big_buck_bunny_1080p_h264.mov
-# mkv=$home/big_buck_bunny_1080p_h264_transcoded.mkv
 mkv=/dev/null
+# mkv=$home/big_buck_bunny_1080p_h264_transcoded.mkv
 gputesttypes='fur, tess_x8, tess_x16, tess_x32, tess_x64, gi, pixmark_piano, pixmark_volplosion, plot3d, triangle'
 testid=`date +%Y%m%d-%H%M%S`
 url_ipg="https://software.intel.com/sites/default/files/IntelPowerGadget3.0.1.zip"
@@ -76,12 +82,12 @@ humantime () {
 	echo $((($1%3600)/60))m$(($1%60))s
 }
 editconf () {
-	local val
-	[[ $2 =~ ^-?[0-9]+$ ]] && val=$2 || val="'$2'"
+	local val re=$' \t\n'
+	[[ $2 =~ $re ]] && val="'$2'" || val=$2
 	eval "$1=$val"
 	if [[ -r "$conf" ]] && grep -qE "^$1=" "$conf"; then
 		cp -f "$conf" "$conf~"
-		sed -E "s:^$1=.*:$1=${val//:/\\:}:" "$conf~" > "$conf"
+		sed -E "s:^$1=[^[:space:]]+:$1=${val//:/\\:}:" "$conf~" > "$conf"
 	else
 		echo "$1=$val" >> "$conf"
 	fi
@@ -180,8 +186,41 @@ freemb () {
 	free=`echo "($page*$free)/1048576" | bc -l`
 	echo ${free/.*/}
 }
+getphycores () {
+	sysctl -n hw.physicalcpu
+}
+getlogicalcores () {
+	sysctl -n hw.logicalcpu
+}
+getthreads () {
+	if [[ $1 -lt 0 ]]; then getphycores
+	elif [[ $1 = 0 ]]; then getlogicalcores
+	else echo $1
+	fi
+}
+strcmp () {
+	[[ "$1" = "$2" ]] && return 0 || return 1
+}
+strcmpi () {
+	shopt -s nocasematch
+	[[ "$1" = "$2" ]]
+	local x=$?
+	shopt -u nocasematch
+	return $x
+}
+regexp () {
+	[[ "$1" =~ "$2" ]] && return 0 || return 1
+}
+regexpi () {
+	shopt -s nocasematch
+	[[ "$1" =~ "$2" ]]
+	local x=$?
+	shopt -u nocasematch
+	return $x
+}
 
 #------------------------------ GET functions ------------------------------#
+
 
 moh-get-handbrake ()
 {
@@ -383,6 +422,20 @@ moh-cmd ()
 	do=usercmd
 	moh-check-usercmd
 	echo "$usercmd" | moh-wrapper UserCmd $usercmdduration
+}
+
+## Do my FFTW test
+moh-do-fft ()
+{
+	do=fft
+	local cmd="$(dirname $0)/fftwtest" 
+	local threads=`getthreads $fftthreads`
+	chmod +x "$cmd"
+	moh-wrapper FFT <<-SH
+		echo
+		sudo nice -n $fftnice "$cmd" $fftduration $threads $fftsize $ffttype $fftwisdom 2>&1 | tee $fftlog
+		echo
+	SH
 }
 
 # Run GpuTest
@@ -603,6 +656,14 @@ moh-perf-x264-long () {
 	moh-perf-x264
 }
 
+## Populate the graph title for the FFTW test
+moh-perf-fft () {
+	local ffts
+	[[ -r $fftlog ]] && ffts=`grep -Eo "[0-9.]+ ffts/sec" $fftlog`
+	perf="threads:$(getthreads $fftthreads), size:$fftsize, type:$ffttype, wisdom:$fftwisdom"
+	[[ -n $ffts ]] && perf="$perf, $ffts"
+}
+
 ## Parse GpuTest log and populate the global $duration, $mins, $secs, $perf
 moh-perf-gputest () {
 	[[ -r $gpucsv ]] || return 0
@@ -805,10 +866,9 @@ moh-plot () {
 
 #--------------------------------- SCRIPT ---------------------------------#
 
-# Conf file
-conf="$(dirname $0)/macoh.conf"
 
-# Load conf. Overrides defaults, but not cmd line options.
+# Parse conf file. Overrides defaults, but not cmd line options.
+conf="$(dirname $0)/macoh.conf"
 [[ -r "$conf" ]] && source "$conf"
 
 # Parse cmd line args (hack job, I know, will use getopts() later)
@@ -838,6 +898,7 @@ ipgcsv="$logs/$testid-ipg.csv"
 hblog="$logs/$testid-hb.log"
 gpucsv="$logs/$testid-gputest.csv"
 gpulog="$logs/$testid-gputest.log"
+fftlog="$logs/$testid-fft.log"
 
 # Error codes
 ERR_CMDLINE=11
@@ -847,7 +908,8 @@ ERR_GPUSWITCH=19
 # Create needed dirs
 mkdir -p "$home" "$logs" "$tmp" "$bin"
 
-# Validate input
+# Validate inputs / conf
+
 [[ $waitstart -gt 0 && $waitend -gt 0 ]] || die $ERR_CMDLINE "-w/-wait requires a positive integer"
 [[ $gpuwidth -gt 0 && $gpuheight -gt 0 ]] || die $ERR_CMDLINE "-r/-res requires MxM, where M and N are positive integers"
 [[ $gpumsaa = [0248] ]] || die $ERR_CMDLINE "-m/-msaa requires 0, 2, 4 or 8"
@@ -902,6 +964,9 @@ while [[ 1 ]]; do
 	s_res=`printf '%-11s' "[${gpuwidth}x$gpuheight]"`
 	s_p95min=`printf '%-8s' "[${p95min}k]"`
 	s_p95max=`printf '%-8s' "[${p95max}k]"`
+	s_fftsize=`printf '%-8s' "[$fftsize]"`
+	s_fftthreads=`printf '%-8s' "[$(getthreads $fftthreads)]"`
+	s_fftdur=`printf '%-10s' "[$(humantime $fftduration)]"`
 	[[ $p95mem = 0 ]] && s_p95mem='[in-place]' || s_p95mem=`printf '%-10s' "[${p95mem}MB]"`
 	s_p95time=`printf '%-8s' "[${p95time}m]"`
 
@@ -909,19 +974,21 @@ while [[ 1 ]]; do
 
 	echo -n "
 -----------------------------------------------------------------------------
-           MacOH 1.3.4-beta. Quit all other apps before launching.          
------------------------------------------------------------------------ Tests
- X. x264 transcode (5-6 mins on a Core i7-4850HQ)
- Y. Longer x264 transcode (~4x longer)
- P. Prime95 (extreme CPU stress, expect laptops to throttle!)
- G. 3D GpuTest (switch GPU beforehand)
+           MacOH v1.4.0. Quit all other apps before launching.          
+----------------------------------------------------------------------- TESTS
+ F. FFT multi-threaded (+ CPU stress)
+ X. Short x264 encode (++ CPU stress, 5-6 mins on Core i7-4850HQ)
+ Y. Long x264 encode (++ CPU stress, about 4 times longer)
+ P. Prime95 (++++ CPU stress, expect laptops to throttle)
+ G. 3D GpuTest (also try switching GPU beforehand)
  S. Switch GPU to integrated or discrete
--------------------------------------------------------------------- Settings
- D. Prime95 Duration $s_p95dur        T. GpuTest Duration $s_gpudur
- N. Prime95 min FFT size $s_p95min      W. GpuTest type [$gputest]
- A. Prime95 max FFT size $s_p95max      R. GpuTest resolution $s_res
- F. Prime95 FFT memory $s_p95mem      M. GpuTest MSAA [$gpumsaa]
--------------------------------------------------------------------- Download
+--------------------------------------------------------------------- OPTIONS
+ FD. FFT duration $s_fftdur        PD. Prime95 duration $s_p95dur
+ FT. FFT threads $s_fftthreads           PM. Prime95 memory $s_p95mem
+ FS. FFT size $s_fftsize              PS. Prime95 fft min,max [${p95min}k,${p95max}k]
+ GD. GpuTest duration $s_gpudur    GM. GpuTest MSAA [$gpumsaa]   
+ GR. GpuTest res $s_res        GT. GpuTest type [$gputest]
+-------------------------------------------------------------------- DOWNLOAD
  1. Intel Power Gadget (2.3 MB)        5. Prime95 (1 MB)
  2. Graphics Layout Engine (13 MB)     6. HandBrakeCLI (6.9 MB)
  3. gfxCardStatus GPU switch (1 MB)    7. GpuTest (1.8 MB)
@@ -934,42 +1001,59 @@ Your choice: [Q=Quit] "
 
 	set -e
 
-	[[ $ans = 1 ]] && { moh-get-ipg; continue; }
-	[[ $ans = 2 ]] && { moh-get-gle; continue; }
-	[[ $ans = 5 ]] && { moh-get-prime95; continue; }
-	[[ $ans = 7 ]] && { moh-get-gputest; continue; }
-	[[ $ans = 6 ]] && { moh-get-handbrake; continue; }
-	[[ $ans = 4 ]] && { moh-get-video; continue; }
-	[[ $ans = 3 ]] && { moh-get-gfx; continue; }
+	strcmpi $ans 1 && { moh-get-ipg; continue; }
+	strcmpi $ans 2 && { moh-get-gle; continue; }
+	strcmpi $ans 5 && { moh-get-prime95; continue; }
+	strcmpi $ans 7 && { moh-get-gputest; continue; }
+	strcmpi $ans 6 && { moh-get-handbrake; continue; }
+	strcmpi $ans 4 && { moh-get-video; continue; }
+	strcmpi $ans 3 && { moh-get-gfx; continue; }
 
-	[[ $ans =~ ^[gG]$ ]] && { moh-do-gputest; [[ $menuquit = 1 ]] && exit || { anykey; continue; } }
-	[[ $ans =~ ^[pP]$ ]] && { moh-do-prime95; [[ $menuquit = 1 ]] && exit || { anykey; continue; } }
-	[[ $ans =~ ^[yY]$ ]] && { moh-do-x264-long;  [[ $menuquit = 1 ]] && exit || { anykey; continue; } }
-	[[ $ans =~ ^[xX]$ ]] && { moh-do-x264;  [[ $menuquit = 1 ]] && exit || { anykey; continue; } }
-	[[ $ans =~ ^[sS]$ ]] && { moh-gpuswitch-menu; continue; }
+	strcmpi $ans g && { moh-do-gputest; [[ $menuquit = 1 ]] && exit || { anykey; continue; } }
+	strcmpi $ans p && { moh-do-prime95; [[ $menuquit = 1 ]] && exit || { anykey; continue; } }
+	strcmpi $ans y && { moh-do-x264-long;  [[ $menuquit = 1 ]] && exit || { anykey; continue; } }
+	strcmpi $ans x && { moh-do-x264;  [[ $menuquit = 1 ]] && exit || { anykey; continue; } }
+	strcmpi $ans f && { moh-do-fft;  [[ $menuquit = 1 ]] && exit || { anykey; continue; } }
+	strcmpi $ans s && { moh-gpuswitch-menu; continue; }
 
-	[[ $ans =~ ^[dD]$ ]] && {
+	strcmpi $ans fd && {
+		read -p "FFT duration in seconds: [$fftduration] " x;
+		[[ $x -gt 0 ]] && editconf fftduration $x && continue
+		[[ -z $x ]] && continue
+		menuerr="FFT test duration must be a number greater than 0"
+	}
+
+	strcmpi $ans ft && {
+		read -p "FFT number of threads (-1=nr phy cores, 0=max threads, n=any n > 0): [$fftthreads] " x;
+		[[ $x -ge -1 ]] && editconf fftthreads $x && continue
+		[[ -z $x ]] && continue
+		menuerr="FFT number of threads must be greater or equal to -1"
+	}
+
+	strcmpi $ans fs && {
+		read -p "FFT size: [$fftsize] " x;
+		[[ $x -gt 1 ]] && editconf fftsize $x && continue
+		[[ -z $x ]] && continue
+		menuerr="FFT size must be a number greater than 1"
+	}
+
+	strcmpi $ans pd && {
 		read -p "Prime95 duration in seconds: [$p95duration] " x;
 		[[ $x -gt 0 ]] && editconf p95duration $x && continue
 		[[ -z $x ]] && continue
-		menuerr="Duration must be a number greater than 0"
+		menuerr="The Prime95 test duration must be a number greater than 0"
 	}
 
-	[[ $ans =~ ^[nN]$ ]] && { 
-		read -p "Prime95 minimum FFT size (thousands): [$p95min] " x
+	strcmpi $ans ps && { 
+		read -p "Prime95 fft min,max sizes in thousands, e.g. 8,16: [$p95min,$p95max] " x
 		[[ -z $x ]] && continue
-		[[ $x -gt 0 && $x -le $p95max && $x =~ ^[0-9]+$ ]] && editconf p95min $x && continue
-		menuerr="The Prime95 min FFT size must be a positive integer smaller or equal to the max FFT size ($p95max)"
+        x=(${x/[^0-9]/ })
+		[[ ${x[0]} -le ${x[1]} && ${x[0]}${x[1]} =~ ^[0-9]+$ ]] && \
+			editconf p95min ${x[0]} && editconf p95max ${x[1]} && continue
+		menuerr="The Prime95 fft min,max sizes must be a pair of positive integers with min <= max, e.g. 8,16"
 	}
 
-	[[ $ans =~ ^[aA]$ ]] && { 
-		read -p "Prime95 maximum FFT size (thousands): [$p95max] " x
-		[[ -z $x ]] && continue
-		[[ $x -ge $p95min && $x =~ ^[0-9]+$ ]] && editconf p95max $x && continue
-		menuerr="The Prime95 max FFT size must be a positive integer greater or equal to the min FFT size ($p95min)"
-	}
-
-	[[ $ans =~ ^[fF]$ ]] && { 
+	strcmpi $ans pm && { 
 		read -p "Prime95 FFT memory (MB), use 0 to do the FFTs in-place (CPU stressful): [$p95mem] " x
 		[[ -z $x ]] && continue
 		free=$(freemb)
@@ -978,20 +1062,20 @@ Your choice: [Q=Quit] "
 		menuerr="The Prime95 FFT memory must be a positive integer less than half your free RAM ($free/2=$free2)"
 	}
 
-	[[ $ans =~ ^[tT]$ ]] && {
-		read -p "GpuTest duration in seconds: [$timeout] " x;
+	strcmpi $ans gd && {
+		read -p "GpuTest duration in seconds: [$gpuduration] " x;
 		[[ $x -gt 0 ]] && editconf gpuduration $x && continue
 		[[ -z $x ]] && continue
 		menuerr="Duration must be a number greater than 0"
 	}
 
-	[[ $ans =~ ^[wW]$ ]] && { 
+	strcmpi $ans gt && { 
 		menu "Choose GpuTest benchmark:" "$gputest" ${gputesttypes//,/}
 		[[ $menuchoice = $gputest ]] || editconf gputest $menuchoice
 		continue
 	}
 
-	[[ $ans =~ ^[uU]$ ]] && {
+	strcmpi $ans gp && {
 		read -p "GpuTest priority in -19...20 (smaller values means higher priority): [$gpunice] " x;
 		[[ -z $x ]] && continue
 		[[ $x =~ ^-?[0-9]+$ && $x -ge -19 && $x -le 20 ]] && editconf gpunice $x && {
@@ -1001,7 +1085,7 @@ Your choice: [Q=Quit] "
 		menuerr="Priority (niceness) must be an integer in -19...20"
 	}
 
-	[[ $ans =~ ^[rR]$ ]] && { 
+	strcmpi $ans gr && { 
 		read -p "GpuTest resolution: [${gpuwidth}x$gpuheight] " x
 		[[ -z $x ]] && continue
 		[[ $x =~ ^[0-9]+x[0-9]+$ ]] && editconf gpuwidth ${x/x*/} \
@@ -1009,14 +1093,14 @@ Your choice: [Q=Quit] "
 		menuerr="Resolution must be MxN, where M and N are positive integers"
 	}
 
-	[[ $ans =~ ^[mM]$ ]] && { 
+	strcmpi $ans gm && { 
 		read -p "GpuTest MSAA value (0, 2, 4 or 8): [$gpumsaa] " x
 		[[ -z $x ]] && continue
 		[[ $x =~ ^[0248]$ ]] && editconf gpumsaa $x && continue
 		menuerr="MSAA value must be 0, 2, 4 or 8"
 	}
 
-	[[ $ans =~ ^[hH]$ ]] && {
+	strcmpi $ans hp && {
 		read -p "HandBrake priority in -19...20 (smaller values means higher priority): [$hbnice] " x;
 		[[ -z $x ]] && continue
 		[[ $x =~ ^-?[0-9]+$ && $x -ge -19 && $x -le 20 ]] && editconf hbnice $x && {
