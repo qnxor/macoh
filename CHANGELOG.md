@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- 1.4.0, 2015-03-09 - Added my own FFT test (emulates humane CPU stress, should not throttle)
 - 1.3.4-beta, 2015-03-08 - Fixed Handbrake URL
 - 1.3.1-beta, 2014-05-26 - User defined command timeout fix
 - 1.3.0-beta, 2014-05-13 - Compiled Prime95 for command line (mprime), Prime95 can be started automatically, added Prime95 menu options, separate GpuTest and Prime95 durations in menu, cleaner menu, some bug fixes
