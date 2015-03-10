@@ -29,7 +29,7 @@ p95duration=300
 p95nice=0
 fftduration=300
 fftsize=2048
-fftthreads=`sysctl -n hw.physicalcpu`
+fftthreads=-1
 ffttype=0
 fftwisdom=0
 fftnice=-10
@@ -39,7 +39,6 @@ mov=big_buck_bunny_1080p_h264.mov
 mkv=/dev/null
 # mkv=$home/big_buck_bunny_1080p_h264_transcoded.mkv
 gputesttypes='fur, tess_x8, tess_x16, tess_x32, tess_x64, gi, pixmark_piano, pixmark_volplosion, plot3d, triangle'
-testid=`date +%Y%m%d-%H%M%S`
 url_ipg="https://software.intel.com/sites/default/files/IntelPowerGadget3.0.1.zip"
 url_handbrake="http://download.handbrake.fr/releases/0.9.9/HandBrake-0.9.9-MacOSX.6_CLI_x86_64.dmg"
 url_gle="http://heanet.dl.sourceforge.net/project/glx/gle4%20(Current%20Active%20Version)/4.2.4c/gle-graphics-4.2.4c-exe-mac.dmg"
@@ -54,6 +53,23 @@ url_im="http://www.imagemagick.org/download/binaries/ImageMagick-x86_64-apple-da
 
 #------------------------------ Core functions ------------------------------#
 
+moh-init () {
+	# Internal vars
+	[[ -n $1 ]] && testid=$1 || testid=`date +%Y%m%d-%H%M%S`
+	duration=0
+	hduration=0
+	code=''
+	tmp="$home/tmp"
+	bin="$home/bin"
+	logs="$home/logs"
+	ipgcsv="$logs/$testid-ipg.csv"
+	hblog="$logs/$testid-hb.log"
+	gpucsv="$logs/$testid-gputest.csv"
+	gpulog="$logs/$testid-gputest.log"
+	fftlog="$logs/$testid-fft.log"
+	# Create needed dirs
+	mkdir -p "$home" "$logs" "$tmp" "$bin"
+}
 die () {
 	local code=$1; shift; echo "Error: $@." >&2; exit $code
 }
@@ -194,9 +210,13 @@ getlogicalcores () {
 	sysctl -n hw.logicalcpu
 }
 getthreads () {
-	if [[ $1 -lt 0 ]]; then getphycores
-	elif [[ $1 = 0 ]]; then getlogicalcores
-	else echo $1
+	if [[ $1 -lt 0 ]]; then
+		local t=$((`getphycores`-1))
+		[[ $t -lt 1 ]] && echo 1 || echo $t
+	elif [[ $1 = 0 ]]; then
+		getlogicalcores
+	else
+		echo $1
 	fi
 }
 strcmp () {
@@ -996,21 +1016,8 @@ while [[ -n $@ ]]; do
 	die $ERR_CMDLINE "Unrecognized option '$1'"
 done
 
-# Internal vars
-duration=0
-hduration=0
-code=''
-tmp="$home/tmp"
-bin="$home/bin"
-logs="$home/logs"
-ipgcsv="$logs/$testid-ipg.csv"
-hblog="$logs/$testid-hb.log"
-gpucsv="$logs/$testid-gputest.csv"
-gpulog="$logs/$testid-gputest.log"
-fftlog="$logs/$testid-fft.log"
-
-# Create needed dirs
-mkdir -p "$home" "$logs" "$tmp" "$bin"
+# init variables
+moh-init $testid
 
 # Validate inputs / conf
 
@@ -1065,7 +1072,12 @@ esac
 [[ -n $gpuswitch ]] && exit $ecode
 
 # If not, show menu
-while [[ 1 ]]; do
+while [[ 1 ]]
+do
+	# call this here to re-init testid and filename (date/time) or else
+	# tests will override each other if the user does not exit the menu
+	moh-init
+
 	s_hbnice=`printf '%-5s' "[$hbnice]"`
 	s_gpunice=`printf '%-5s' "[$gpunice]"`
 	s_p95dur=`printf '%-10s' "[$(humantime $p95duration)]"`
@@ -1079,11 +1091,9 @@ while [[ 1 ]]; do
 	[[ $p95mem = 0 ]] && s_p95mem='[in-place]' || s_p95mem=`printf '%-10s' "[${p95mem}MB]"`
 	s_p95time=`printf '%-8s' "[${p95time}m]"`
 
- # H. HandBrake priority $s_hbnice            U. GpuTest priority $s_gpunice
-
 	echo -n "
 -----------------------------------------------------------------------------
-           MacOH v1.5.0. Quit all other apps before launching.          
+           MacOH v1.5.1. Quit all other apps before launching.          
 ----------------------------------------------------------------------- TESTS
  F. FFT multi-threaded (+ CPU stress)
  X. Short x264 encode (++ CPU stress, 5-6 mins on Core i7-4850HQ)
@@ -1133,7 +1143,7 @@ Your choice: [Q=Quit] "
 	}
 
 	strcmpi $ans ft && {
-		read -p "FFT number of threads (-1=nr phy cores, 0=max threads, n=any n > 0): [$fftthreads] " x;
+		read -p "FFT number of threads (-1=cores-1, 0=maxthreads, n=any n > 0): [$fftthreads] " x;
 		[[ $x -ge -1 ]] && editconf fftthreads $x && continue
 		[[ -z $x ]] && continue
 		menuerr="FFT number of threads must be greater or equal to -1"
