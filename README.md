@@ -1,7 +1,7 @@
 MacOH
 =====
 
-Small tool for Mac OS X that automatically downloads and installs tools and content and runs CPU or GPU stress tests, monitoring CPU temperature and frequency which are plotted versus time. The purpose is to evaluate CPU throttling and/or overheating (not performance).
+Small tool for Mac OS X runs CPU and GPU stress tests, monitoring CPU frequency, temperature and power draw which are plotted versus time. The purpose is to evaluate CPU throttling and/or overheating (not performance).
 
 Output examples: [x264](http://www.damtp.cam.ac.uk/research/afha/people/bogdan/macoh/x264.png) (no throttling), [Prime95](http://www.damtp.cam.ac.uk/research/afha/people/bogdan/macoh/prime95.png) (heavy throttling), [3D-Intel 5100](http://www.damtp.cam.ac.uk/research/afha/people/bogdan/macoh/gputest-irispro.png) (throttling), [3D-Nvidia 750M](http://www.damtp.cam.ac.uk/research/afha/people/bogdan/macoh/gputest-gt750m.png) (no throttling).
 
@@ -75,7 +75,7 @@ Todo
 - [ ] GPU freq and temp monitoring +graph (any free tool?) [#6](//github.com/qnxor/macoh/issues/6)
 - [x] Add GPU testing
 - [x] Add Prime95
-- [ ] Avg and stddev between start+wait+5sec and end-wait-5sec [#3](//github.com/qnxor/macoh/issues/3)
+- [x] Stats, Tjunction and TDP detection, etc [#3](//github.com/qnxor/macoh/issues/3)
 - [x] GpuTest results
 - [ ] Uninstall/clean option [#4](//github.com/qnxor/macoh/issues/4)
 - [ ] Auto-upload results and graph somewhere (with prompt)?

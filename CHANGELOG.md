@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- 1.5.0, 2015-03-10 - Plots power draw, indicate stats, detects Tmax and TDP overruns
 - 1.4.0, 2015-03-09 - Added my own FFT test (emulates humane CPU stress, should not throttle)
 - 1.3.4-beta, 2015-03-08 - Fixed Handbrake URL
 - 1.3.1-beta, 2014-05-26 - User defined command timeout fix

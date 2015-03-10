@@ -14,6 +14,7 @@ usercmd=''
 usercmdduration=300
 waitstart=15
 waitend=15
+ipgpoll=500
 gputest=tess_x64
 gpuwidth=1280
 gpuheight=720
@@ -546,6 +547,10 @@ moh-do-gfx () {
 	echo "gfxCardStatus started, it should appear on the menu bar. Click it to select which GPU to use for 3D if you have both an integrated and discrete GPU."
 }
 
+moh-do-plot () {
+	do=plot
+	moh-plot $testid
+}
 
 #--------------------------- AUXILIARY functions ---------------------------#
 
@@ -637,6 +642,7 @@ moh-gpuswitch-menu () {
 ## stop condition
 moh-perf-prime95 () {
 	perf="min:$p95min, max:$p95max, mem:$p95mem, time:$p95time"
+	testname=Prime95
 }
 
 ## Parse HandBrake log and populate the global $duration, $mins, $secs, $perf
@@ -650,10 +656,12 @@ moh-perf-x264 () {
 	duration=${duration/.*/}
 	hduration=`humantime $duration`
 	perf="${fps:0:5} fps"
+	testname=x264
 }
 
 moh-perf-x264-long () {
 	moh-perf-x264
+	testname=x264-Long
 }
 
 ## Populate the graph title for the FFTW test
@@ -662,6 +670,7 @@ moh-perf-fft () {
 	[[ -r $fftlog ]] && ffts=`grep -Eo "[0-9.]+ ffts/sec" $fftlog`
 	perf="threads:$(getthreads $fftthreads), size:$fftsize, type:$ffttype, wisdom:$fftwisdom"
 	[[ -n $ffts ]] && perf="$perf, $ffts"
+	testname=FFT
 }
 
 ## Parse GpuTest log and populate the global $duration, $mins, $secs, $perf
@@ -680,6 +689,7 @@ moh-perf-gputest () {
 	gpu=${gpu/GeForce /}
 	local fps=`echo "$frames/$duration" | bc -l`
 	perf="${fps:0:5} fps, ${gpuwidth}x$gpuheight, ${gpumsaa}xAA, $gpu"
+	testname=GpuTest
 }
 
 ## Wrapper to start, monitor and log any job which is read from stdin
@@ -697,9 +707,7 @@ moh-wrapper ()
 	# Prepare script file to pass to Intel Power Gadget
 	local cmdfile=$tmp/cmd-$do.sh
 
-	local code=$(</dev/stdin) 	# Benchmark code passed via stdin
-	local sudo 					# Code to deal with sudo
-	local handbrake 			# Code to deal with HandBrake (cpu priority)
+	local code=$(</dev/stdin) 	# Get code to execute from stdin into $code
 	local watchdog 				# Code to deal with max duration (timeout)
 
 	# Timeout needed?
@@ -719,33 +727,34 @@ moh-wrapper ()
 	# Is the code using sudo? If so, ask for the password now to avoid the
 	# password prompt being ocluded later by the wrapping scripts which may
 	# redirect stdout/stderr.
-	if [[ $code =~ sudo\ (re)?nice ]]; then
-		sudo='echo Changing CPU priority may require your password. && sudo echo'
-	elif [[ $code =~ sudo[[:space:]] ]]; then
-		sudo='echo Sudo detected. It may require your password. && sudo echo'
-	fi
+	local needsudo=`sudo -n echo foo 2>/dev/null`
+	[[ $code =~ sudo && $needsudo != foo ]] && {
+		echo Your password is needed to run the test in elevated mode.
+		sudo echo
+	}
 
 	# Build script file to pass to Intel Power Gadget
 	cat > $cmdfile <<-SH
 		#!/bin/bash
-		echo
-		$handbrake
-		$sudo
-		echo Waiting $waitstart seconds to capture idle temperature ...
-		sleep $waitstart
-		echo Starting $testname benchmark. May take a while and fans may go berserk ...
-		$watchdog
-		$code
-		echo Test finished. Cooling off for $waitend seconds ...
-		sleep $waitend
+		{
+			echo Waiting $waitstart seconds to capture idle temperature ...
+			sleep $waitstart
+			echo Starting $testname benchmark. It may take a while and fans may go berserk ...
+			$watchdog
+			$code
+			echo Test finished. Cooling off for $waitend seconds ...
+			sleep $waitend
+		} >&2
 	SH
 	chmod 700 $cmdfile
 	
 	# Finally ... Go!
 	local timestart=$(date +%s)
-	/Applications/Intel\ Power\ Gadget/PowerLog -resolution 500 -file $ipgcsv -cmd $cmdfile
+	> $tmp/ipgvals.log
+	#script -q /dev/null \
+		/Applications/Intel\ Power\ Gadget/PowerLog -resolution $ipgpoll \
+			-file $ipgcsv -cmd $cmdfile > $tmp/ipgvals.log
 	local timeend=$(date +%s)
-	# echo "Done."
 
 	# Don't do these in $code because the user may press Ctrl-C
 	[[ $do =~ gputest ]] && {
@@ -772,45 +781,126 @@ moh-plot () {
 	!margins 2 2 2 2
 	set font texcmr
 	set titlescale 0.9
+	!set texlabels 1
+	Tmax = arg(6)
+	Tmax2 = 0.95*Tmax
+	TDP = arg(7)
 	begin graph
 	   title arg$(2) dist 0.2
 	   xtitle "Time (sec)"
-	   ytitle "CPU Temperature (C)" color red
-	   y2title "CPU Frequency (MHz)" color blue
-	   data arg$(1) ignore 1 d1=c1,c9 d2=c1,c2
+ 	   y2title "CPU Frequency (MHz)" color blue
+ 	   ! y2side color blue
 	   axis grid
 	   subticks on
-	   ticks color grey10
+	   ticks color rgb255(224,224,224)
 	   subticks lstyle 2
-	   yaxis min 20 max 110 dticks 10 dsubticks 2.5
-	   y2axis min 400 max 4000 dticks 200 dsubticks 100
-	   !y2axis min 600 max 3300 nticks 9
-	   !xnames from d1
-	   key pos bl offset 1.25 0.25
+	   subticks color rgb255(224,224,224)
+	   yaxis min 0 max 120 dticks 10 dsubticks 3.3333
+	   y2axis min 400 max 4000 dticks 300 ftick 400
+	   ! xnames from d1
+	   key pos bl nobox offset 2.5 0.25
+	   data arg$(1) ignore 1 d1=c1,c9 d2=c1,c2 d3=c1,c3
 	   d1 line color red key arg$(3)
-	   d2 x2axis y2axis line color blue key arg$(4)
+	   d2 x2axis y2axis line color blue key arg$(5)
+	   d3 line color green key arg$(4)
+	   let d4 = Tmax
+	   !let d5 = Tmax2
+	   let d6 = TDP
+	   d4 lstyle 2 color red
+	   !d5 lstyle 2 color red
+	   d6 lstyle 2 color green
 	end graph
+
+	! Left axis labels, we want multiple colors so we
+	! use tex instead of ytitle
+	
+	amove xg(xgmax/100) yg(Tmax+1)
+	set color red
+	tex "Tmax="+format$(Tmax,"fix 1")+"C" name tmax
+	
+	!amove xg(xgmax/100) yg(Tmax2+1)
+	!set color red
+	!tex "0.95 Tmax" name tmax2
+	
+	amove xg(xgmax/100) yg(TDP+1)
+	set color green
+	tex "TDP="+format$(TDP,"fix 1")+"W" name tmax
+
+	amove 2.1 2.25
+	set color green
+	begin rotate 90
+		tex "CPU Power (W)" name texpow
+	end rotate
+
+	amove 2.1 4.9
+	set color black
+	begin rotate 90
+		tex "," name texcomma
+	end rotate
+
+	amove 2.1 5.25
+	set color red
+	begin rotate 90
+		tex "CPU Temp (C)" name textemp
+	end rotate
 	GLE
 
 	# graph files
 	local graph=$home/$testid-$do.png
 	local graphgif=$home/$testid-$do.gif
 
-	# Remove the trailing lines (Intel decided to add non-csv at athe end) 
+	# Read TDP from igp's report ... need to log stderr for that
+	#TODO: log IGP stderr too
+
+	# Remove the 11 trailing lines (Intel decided to add non-csv at athe end) 
 	# and the first two columns (there's a bug in GLE: it can't properly read
 	# the xnames from a column different than 1st column; 
 	# "xnames from d1" reads the y values, instead of x values)
 	local lines=(`wc -l "$ipgcsv"`)
 	head -n $((${lines[0]}-11)) $ipgcsv | sed 's/^[^,]*,[^,]*,//' > $tmp/ipg.csv
+	lines=(`wc -l $tmp/ipg.csv`)
 
 	# Get max temp, max freq, duration and avg fps
 	local maxtemp=`cut -f9 -d, $tmp/ipg.csv | sed 's/[[:space:]]//g' | sort -n | tail -1`
+	local maxpow=`cut -f3 -d, $tmp/ipg.csv | sed 's/[[:space:]]//g' | sort -n | tail -1`
 	local maxfreq=`cut -f2 -d, $tmp/ipg.csv | sed 's/[[:space:]]//g' | sort -n | tail -1`
+
+	# get TDP and Tmax
+	local Tmax=`grep -oE '^Max Temp = [0-9.]+' $tmp/ipgvals.log`
+	Tmax=${Tmax##* }
+	[[ -n $Tmax ]] || Tmax=0
+	local TDP=`grep -oE '^TDP.*= [0-9.]+' $tmp/ipgvals.log`
+	TDP=${TDP##* }
+	[[ -n $TDP ]] || TDP=0
+
+	# idle period lines in the csv (skip these to compute avg,std)
+	local linestart=$(((waitstart+2)*1000/ipgpoll))
+	local lineend=$((lines-(waitend+2)*1000/ipgpoll))
+	local readuseful="sed -n ${linestart},${lineend}p $tmp/ipg.csv"
+
+	# Get mean and stddev for temp
+	local avgfreq=`$readuseful | awk -F',' '{s+=$2} END {printf "%.0f\n", s/NR}'`
+	local avgpow=`$readuseful | awk -F',' '{s+=$3} END {printf "%.1f\n", s/NR}'`
+	local avgtemp=`$readuseful | awk -F',' '{s+=$9} END {printf "%.1f\n", s/NR}'`
+	local stdfreq=`$readuseful | awk -F',' '{d=$2-'$avgfreq';s+=d*d} END {printf "%.0f\n", sqrt(s/NR)}'`
+	local stdpow=`$readuseful | awk -F',' '{d=$3-'$avgpow';s+=d*d} END {printf "%.1f\n", sqrt(s/NR)}'`
+	local stdtemp=`$readuseful | awk -F',' '{d=$9-'$avgtemp';s+=d*d} END {printf "%.1f\n", sqrt(s/NR)}'`
+
+	# compute how much the Temp and Power are >= the limits
+	local overlimpow=`$readuseful | awk -F',' '$3 > '$TDP' {s+=1} END {printf "%.1f%%\n", s/NR*100}'`
+	local overlimtemp=`$readuseful | awk -F',' '$9 > 0.95*'$Tmax' {s+=1} END {printf "%.1f%%\n", s/NR*100}'`
 
 	# Parse log files and extract perf and duration strings
 	moh-perf-$do
+	# Extract duration if it wasn't set in moh-perf-$do
+	[[ -z $duration || $duration = 0 ]] && {
+		duration=`cut -f1 -d, $tmp/ipg.csv | tail -n 1`
+		printf -v duration "%.0f" $duration
+		let duration=duration-waitstart-waitend
+		hduration=`humantime $duration`
+	}
 
-	# Prepend to title
+	# Prepend to title, $testname shoul dbe set in moh-perf-$do (or before)
 	local testtitle=$testname
 	[[ $do = gputest ]] && testtitle="$testtitle ($gputest)"
 
@@ -834,13 +924,17 @@ moh-plot () {
 		$tmp/ipg.gle \
 		$tmp/ipg.csv \
 		"$graphtitle" \
-		"Temperature (max reached: $maxtemp C)" \
-		"Frequency" \
+		"Temp (max:${maxtemp}, avg:${avgtemp}, \\tex{$>\!0.95\cdot$}Tmax:${overlimtemp})" \
+		"Power (max:${maxpow}, avg:${avgpow}, \\tex{$>$}TDP:${overlimpow})" \
+		"Freq (max:${maxfreq}, avg:${avgfreq})" \
+		$Tmax \
+		$TDP \
 	>/dev/null
 	
 	# Crop and make smaller, use sips if ImageMagick is not available
 	set-imagick
 	if which convert &>/dev/null; then
+		rm -f $graph-1
 		mogrify -crop 1340x730+125+35 -quality 96 -colors 64 -write $graph-1 $graph \
 			&& mv $graph-1 $graph
 	elif which sips &>/dev/null; then
@@ -848,6 +942,7 @@ moh-plot () {
 		graph=$graphgif
 		rm $graph
 	fi
+	rm -f $graph*~
 
     echo
     [[ -n $perf ]] && echo "Benchmark:        $perf"
@@ -867,6 +962,12 @@ moh-plot () {
 #--------------------------------- SCRIPT ---------------------------------#
 
 
+# Error codes
+ERR_CMDLINE=11
+ERR_KILL=13
+ERR_GPUSWITCH=19
+
+
 # Parse conf file. Overrides defaults, but not cmd line options.
 conf="$(dirname $0)/macoh.conf"
 [[ -r "$conf" ]] && source "$conf"
@@ -882,8 +983,16 @@ while [[ -n $@ ]]; do
 	[[ $1 = -m || $1 = -msaa      ]] && gpumsaaa=$2 && shift 2 && continue
 	[[ $1 = -s || $1 = -gpuswitch ]] && gpuswitch=$2 && shift 2 && continue
 	[[ $1 = -g || $1 = -gputest   ]] && gputest=$2 && shift 2 && continue
-	[[ $1 = -plot                 ]] && testid=$2 && do=moh-plot && shift 2 && continue
 	[[ $1 = -name                 ]] && testname=$2 && shift 2 && continue
+	[[ $1 = -plot                 ]] && {
+		testid=`basename ${2%.*}`
+		[[ $testid == *-*-* ]] || die $ERR_CMDLINE "-plot requires a filename YYYYMMDD-HHMMSS-NAME.log"
+		do=${testid#*-*-}
+		testid=${testid%-*}
+		justplot=1
+		shift 2
+		continue
+	}
 	die $ERR_CMDLINE "Unrecognized option '$1'"
 done
 
@@ -899,11 +1008,6 @@ hblog="$logs/$testid-hb.log"
 gpucsv="$logs/$testid-gputest.csv"
 gpulog="$logs/$testid-gputest.log"
 fftlog="$logs/$testid-fft.log"
-
-# Error codes
-ERR_CMDLINE=11
-ERR_KILL=13
-ERR_GPUSWITCH=19
 
 # Create needed dirs
 mkdir -p "$home" "$logs" "$tmp" "$bin"
@@ -924,6 +1028,11 @@ mkdir -p "$home" "$logs" "$tmp" "$bin"
 	[012])      moh-gpuswitch $gpuswitch; ecode=$?;;
 	*) die $ERR_CMDLINE "-s/-gpuswitch requires one of: integrated, discrete, dynamic or 0, 1, 2"
 esac
+
+[[ -n $justplot ]] && {
+	moh-plot $testid
+	exit $?
+}
 
 # Cmd line predefined test?
 [[ -n $do ]] && {
@@ -974,7 +1083,7 @@ while [[ 1 ]]; do
 
 	echo -n "
 -----------------------------------------------------------------------------
-           MacOH v1.4.0. Quit all other apps before launching.          
+           MacOH v1.5.0. Quit all other apps before launching.          
 ----------------------------------------------------------------------- TESTS
  F. FFT multi-threaded (+ CPU stress)
  X. Short x264 encode (++ CPU stress, 5-6 mins on Core i7-4850HQ)
