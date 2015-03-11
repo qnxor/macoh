@@ -799,15 +799,16 @@ moh-plot () {
 	papersize 20 10
 	size 20 10
 	!margins 2 2 2 2
-	set font texcmr
-	set titlescale 0.9
+	set font texcmss
+	set titlescale 1
 	!set texlabels 1
 	Tmax = arg(6)
 	Tmax2 = 0.95*Tmax
 	TDP = arg(7)
 	begin graph
-	   title arg$(2) dist 0.2
+	   title arg$(2) dist 0.5
 	   xtitle "Time (sec)"
+	   x2axis off
  	   y2title "CPU Frequency (MHz)" color blue
  	   ! y2side color blue
 	   axis grid
@@ -818,11 +819,14 @@ moh-plot () {
 	   yaxis min 0 max 120 dticks 10 dsubticks 3.3333
 	   y2axis min 400 max 4000 dticks 300 ftick 400
 	   ! xnames from d1
-	   key pos bl nobox offset 2.5 0.25
+	   ! key pos bl nobox offset 2.5 0.25
 	   data arg$(1) ignore 1 d1=c1,c9 d2=c1,c2 d3=c1,c3
-	   d1 line color red key arg$(3)
-	   d2 x2axis y2axis line color blue key arg$(5)
-	   d3 line color green key arg$(4)
+	   ! d1 line color red key arg$(3)
+	   ! d2 x2axis y2axis line color !blue key ""+arg$(5)+""
+	   ! d3 line color green key arg$(4)
+	   d1 line color red
+	   d2 x2axis y2axis line color blue
+	   d3 line color green
 	   let d4 = Tmax
 	   !let d5 = Tmax2
 	   let d6 = TDP
@@ -831,12 +835,21 @@ moh-plot () {
 	   d6 lstyle 2 color green
 	end graph
 
+	begin key
+		position bl
+		!nobox
+		offset 2.5 0.25
+		line color red text arg$(3)
+		line color blue text arg$(5)
+		line color green text arg$(4)
+	end key
+
 	! Left axis labels, we want multiple colors so we
 	! use tex instead of ytitle
 	
 	amove xg(xgmax/100) yg(Tmax+1)
 	set color red
-	tex "Tmax="+format$(Tmax,"fix 1")+"C" name tmax
+	write "Tmax="+format$(Tmax,"fix 1")+"C"
 	
 	!amove xg(xgmax/100) yg(Tmax2+1)
 	!set color red
@@ -844,24 +857,24 @@ moh-plot () {
 	
 	amove xg(xgmax/100) yg(TDP+1)
 	set color green
-	tex "TDP="+format$(TDP,"fix 1")+"W" name tmax
+	write "TDP="+format$(TDP,"fix 1")+"W"
 
 	amove 2.1 2.25
 	set color green
 	begin rotate 90
-		tex "CPU Power (W)" name texpow
+		write "CPU Power (W)"
 	end rotate
 
 	amove 2.1 4.9
 	set color black
 	begin rotate 90
-		tex "," name texcomma
+		write ","
 	end rotate
 
 	amove 2.1 5.25
 	set color red
 	begin rotate 90
-		tex "CPU Temp (C)" name textemp
+		write "CPU Temp (C)"
 	end rotate
 	GLE
 
@@ -884,6 +897,7 @@ moh-plot () {
 	local maxtemp=`cut -f9 -d, $tmp/ipg.csv | sed 's/[[:space:]]//g' | sort -n | tail -1`
 	local maxpow=`cut -f3 -d, $tmp/ipg.csv | sed 's/[[:space:]]//g' | sort -n | tail -1`
 	local maxfreq=`cut -f2 -d, $tmp/ipg.csv | sed 's/[[:space:]]//g' | sort -n | tail -1`
+	printf -v maxpow "%.1f" $maxpow
 
 	# get TDP and Tmax
 	local Tmax=`grep -oE '^Max Temp = [0-9.]+' $tmp/ipgvals.log`
@@ -944,9 +958,9 @@ moh-plot () {
 		$tmp/ipg.gle \
 		$tmp/ipg.csv \
 		"$graphtitle" \
-		"Temp (max:${maxtemp}, avg:${avgtemp}, \\tex{$>\!0.95\cdot$}Tmax:${overlimtemp})" \
-		"Power (max:${maxpow}, avg:${avgpow}, \\tex{$>$}TDP:${overlimpow})" \
-		"Freq (max:${maxfreq}, avg:${avgfreq})" \
+		"Temp, max:${maxtemp}, avg:${avgtemp}, above 0.95Tmax:${overlimtemp}" \
+		"Power, max:${maxpow}, avg:${avgpow}, above TDP:${overlimpow}" \
+		"Freq, max:${maxfreq}, avg:${avgfreq}" \
 		$Tmax \
 		$TDP \
 	>/dev/null
@@ -1093,7 +1107,7 @@ do
 
 	echo -n "
 -----------------------------------------------------------------------------
-           MacOH v1.5.1. Quit all other apps before launching.          
+           MacOH v1.5.2. Quit all other apps before launching.          
 ----------------------------------------------------------------------- TESTS
  F. FFT multi-threaded (+ CPU stress)
  X. Short x264 encode (++ CPU stress, 5-6 mins on Core i7-4850HQ)

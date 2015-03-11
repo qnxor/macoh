@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- 1.5.2, 2015-03-11 - Fixed graph missing labels (tex problem)
 - 1.5.1, 2015-03-10 - Fixed FFT binary and number of default threads (cores - 1)
 - 1.5.0, 2015-03-10 - Plots power draw, indicate stats, detects Tmax and TDP overruns
 - 1.4.0, 2015-03-09 - Added my own FFT test (emulates humane CPU stress, should not throttle)
