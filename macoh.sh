@@ -424,6 +424,12 @@ moh-check-gputest ()
 	[[ -r $bin/done-gputest && -d $bin/GpuTest.app ]] || moh-get-gputest force
 }
 
+# Check packages for the FFT test
+moh-check-fft ()
+{
+	moh-check-common
+}
+
 # Check packages for a user defined command
 moh-check-usercmd ()
 {
@@ -449,6 +455,7 @@ moh-cmd ()
 moh-do-fft ()
 {
 	do=fft
+	moh-check-fft
 	local cmd="$(dirname $0)/fftwtest" 
 	local threads=`getthreads $fftthreads`
 	chmod +x "$cmd"
