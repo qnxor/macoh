@@ -1114,7 +1114,7 @@ do
 
 	echo -n "
 -----------------------------------------------------------------------------
-           MacOH v1.5.2. Quit all other apps before launching.          
+           MacOH v1.5.4. Quit all other apps before launching.          
 ----------------------------------------------------------------------- TESTS
  F. FFT multi-threaded (+ CPU stress)
  X. Short x264 encode (++ CPU stress, 5-6 mins on Core i7-4850HQ)
