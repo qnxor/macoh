@@ -1,6 +1,8 @@
 Changelog
 =========
 
+- 1.5.5, 2020-08-06 - Updated intel power gadget url and fetch
+- 1.5.4, 2016-04-27 - Updated urls for the BBB movie and the newest Intel Power Gadget (Core M compatible)
 - 1.5.3, 2015-08-14 - Fixed dependencies for FFT test
 - 1.5.2, 2015-03-11 - Fixed graph missing labels (tex problem)
 - 1.5.1, 2015-03-10 - Fixed FFT binary and number of default threads (cores - 1)

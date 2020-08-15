@@ -39,7 +39,7 @@ mov=big_buck_bunny_1080p_h264.mov
 mkv=/dev/null
 # mkv=$home/big_buck_bunny_1080p_h264_transcoded.mkv
 gputesttypes='fur, tess_x8, tess_x16, tess_x32, tess_x64, gi, pixmark_piano, pixmark_volplosion, plot3d, triangle'
-url_ipg="https://software.intel.com/sites/default/files/IntelPowerGadget3.0.1.zip"
+url_ipg="https://software.intel.com/file/613985/download"
 url_handbrake="http://download.handbrake.fr/releases/0.9.9/HandBrake-0.9.9-MacOSX.6_CLI_x86_64.dmg"
 url_gle="http://heanet.dl.sourceforge.net/project/glx/gle4%20(Current%20Active%20Version)/4.2.4c/gle-graphics-4.2.4c-exe-mac.dmg"
 url_video="http://blender-mirror.kino3d.org/peach/bigbuckbunny_movies/big_buck_bunny_1080p_h264.mov"
@@ -272,9 +272,8 @@ moh-get-ipg ()
 		set -e
 		rm -f $bin/done-ipg
 		echo "Fetching and installing Intel Power Gadget into /Applications ..."
-		wget $tmp/ipg.zip "$url_ipg" -#
-		unzip -q -o $tmp/ipg.zip -d $tmp
-		mnt $tmp/Intel*.dmg
+		wget $tmp/ipg.dmg "$url_ipg" -#
+		mnt $tmp/ipg.dmg
 		echo "Installing Intel Power Gadget may ask you to enter your Mac password."
 		sudo installer -pkg /Volumes/Intel*\ Power\ Gadget/Install\ Intel\ Power\ Gadget.pkg -target /
 		umnt /Volumes/Intel*\ Power\ Gadget
